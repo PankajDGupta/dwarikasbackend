@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #04: Database Models & Schema (Complete)
+- Spec #05: RBAC Permissions & Role-Based Access Control (Complete)
 
 ## Current Goal
 
-- Implement RBAC Permissions (Spec #05)
+- Implement Product Catalog API (Spec #06)
 
 ## Completed
 
@@ -52,6 +52,13 @@ Update this file after every meaningful implementation change.
   - Generated and applied initial Django migration with `--fake-initial` against the local database
   - **Completed:** 2026-05-30T21:40:00+05:30
 
+- ✅ Spec #05 - RBAC Permissions & Role-Based Access Control (`api/permissions.py`)
+  - Created `IsManager`, `IsStaffOrManager`, and `IsOwnerOrStaff` permission classes
+  - Extracted roles directly from in-memory ephemeral user role claims (populated by `SupabaseJWTAuthentication`)
+  - Guaranteed zero database hits by executing permissions against user role attributes and token claims without DB access
+  - Built comprehensive test suite in `api/tests/test_permissions.py` validating permissions using `assertNumQueries(0)`
+  - **Completed:** 2026-05-30T22:55:00+05:30
+
 ## In Progress
 
 - None.
@@ -63,7 +70,7 @@ Update this file after every meaningful implementation change.
 | Spec | Feature | Django App | Status |
 |------|---------|------------|--------|
 | 04 | Database Models & Schema | `inventory/` | ✅ Complete |
-| 05 | RBAC Permissions | `api/` | 🔲 Not started |
+| 05 | RBAC Permissions | `api/` | ✅ Complete |
 | 06 | Product Catalog API | `inventory/` | 🔲 Not started |
 | 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | 🔲 Not started |
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | 🔲 Not started |
@@ -76,7 +83,7 @@ Update this file after every meaningful implementation change.
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 
-**Next immediate step:** Execute Spec #04 — Database Models & Schema.
+**Next immediate step:** Execute Spec #06 — Product Catalog API.
 
 ## Open Questions
 
