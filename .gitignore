@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# IDE configurations
+.idea/
+.vscode/
+
+# Local environment variables
+.env*
+.env.local
+.temp/
+.branches/

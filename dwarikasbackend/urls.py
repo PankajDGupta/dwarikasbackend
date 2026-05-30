@@ -1,22 +1,17 @@
 """
-URL configuration for dwarikasbackend project.
+URL configuration for dwarikasbackend — Dwarikas Central API Engine.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+All application routes are namespaced under /api/v1/.
+Django admin is excluded (stateless JWT-only API — see settings.py).
+
+References:
+  - context/architecture.md — api/views/ system boundary
+  - context/feature-spec/spec02-Database_and_appconfiguration.md
 """
-from django.contrib import admin
-from django.urls import path
+
+from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # API v1 routes registered by the api app (wired in Spec #03+)
+    # path('api/v1/', include('api.urls')),
 ]
