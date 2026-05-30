@@ -12,8 +12,9 @@ Implement REST endpoints for the product catalog. Public clients (web/mobile) ca
 - `PATCH /api/v1/products/<uuid:id>/` — partial update (manager only)
 - `GET /api/v1/products/<uuid:id>/variants/` — list variants for a product (public)
 - `POST /api/v1/products/<uuid:id>/variants/` — add variant (staff/manager only)
-- Filtering: by `hsn_code`, `gst_slab`, `color`, `size`, `sku`
+- Filtering: by `id`, `hsn_code`, `gst_slab`, `color`, `size`, `sku`
 - Install and configure `django-filter`
+
 
 ---
 
@@ -62,12 +63,14 @@ from inventory.models import Product, ProductVariant
 
 
 class ProductFilter(django_filters.FilterSet):
+    id = django_filters.UUIDFilter()
     hsn_code = django_filters.CharFilter(lookup_expr='iexact')
     gst_slab = django_filters.NumberFilter()
 
     class Meta:
         model = Product
-        fields = ['hsn_code', 'gst_slab']
+        fields = ['id', 'hsn_code', 'gst_slab']
+
 
 
 class ProductVariantFilter(django_filters.FilterSet):

@@ -33,7 +33,11 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
     that DRF's permission layer can apply its own anonymous-access rules.
     """
 
+    def authenticate_header(self, request):
+        return 'Bearer realm="api"'
+
     def authenticate(self, request):
+
         # ── 1. Header extraction ──────────────────────────────────────────────
         auth_header = request.META.get("HTTP_AUTHORIZATION")
         if not auth_header:
@@ -95,7 +99,7 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
         # standard DRF permission classes (IsAuthenticated, IsAdminUser, etc.)
         # to work without a database lookup on every request.
         user = User(username=supabase_uid, email=email)
-        user.is_authenticated = True  # type: ignore[assignment]
+
 
         # Ingest app_metadata role claims onto the user reference.
         # Supabase stores custom roles in app_metadata; fall back to "customer".

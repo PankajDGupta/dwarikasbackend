@@ -4,11 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #05: RBAC Permissions & Role-Based Access Control (Complete)
+- Spec #06: Product Catalog API (Complete)
 
 ## Current Goal
 
-- Implement Product Catalog API (Spec #06)
+- Implement Checkout Reservation & Pessimistic Locking (Spec #07)
+
 
 ## Completed
 
@@ -59,6 +60,20 @@ Update this file after every meaningful implementation change.
   - Built comprehensive test suite in `api/tests/test_permissions.py` validating permissions using `assertNumQueries(0)`
   - **Completed:** 2026-05-30T22:55:00+05:30
 
+- ✅ Spec #06 - Product Catalog API (`inventory/serializers.py`, `inventory/filters.py`, `inventory/views.py`, `inventory/urls.py`)
+  - Added `django-filter>=24.0` dependency and configured it in settings
+  - Configured REST framework settings with default search, filter, and ordering backends along with page-size 25 pagination
+  - Created `ProductVariantSerializer`, `ProductSerializer` (with nested variants prefetch), and `ProductWriteSerializer` to cover all inventory and metadata fields (MRP, packaging dimensions, dietary tags, etc.)
+  - Implemented public catalog query views (list, detail, variants) and RBAC-guarded mutations (create, update, delete)
+  - Added product `id` (UUID key) filtering support on the product list endpoint and updated the feature specification
+  - Added `authenticate_header` to `SupabaseJWTAuthentication` to return `401 Unauthorized` for unauthenticated requests
+  - Fixed read-only property mutation bug on ephemeral `User` class for `is_authenticated`
+  - Created a custom in-memory test runner `ManagedModelTestRunner` to build database tables for unmanaged models during test executions
+  - Built full test suite in `inventory/tests/test_views.py` verifying anonymous reads, RBAC writes/deletes, filtering/searching (including product ID), and N+1 query prevention (asserting 3 queries total on listing)
+  - **Completed:** 2026-05-30T23:58:00+05:30
+
+
+
 ## In Progress
 
 - None.
@@ -71,7 +86,7 @@ Update this file after every meaningful implementation change.
 |------|---------|------------|--------|
 | 04 | Database Models & Schema | `inventory/` | ✅ Complete |
 | 05 | RBAC Permissions | `api/` | ✅ Complete |
-| 06 | Product Catalog API | `inventory/` | 🔲 Not started |
+| 06 | Product Catalog API | `inventory/` | ✅ Complete |
 | 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | 🔲 Not started |
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | 🔲 Not started |
 | 09 | Barcode Generation Endpoints | `inventory/` | 🔲 Not started |
@@ -83,7 +98,8 @@ Update this file after every meaningful implementation change.
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 
-**Next immediate step:** Execute Spec #06 — Product Catalog API.
+**Next immediate step:** Execute Spec #07 — Checkout Reservation & Pessimistic Locking.
+
 
 ## Open Questions
 

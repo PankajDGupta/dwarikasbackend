@@ -12,6 +12,7 @@ References:
 from django.urls import path, include
 
 urlpatterns = [
-    # API v1 routes registered by the api app (wired in Spec #03+)
-    # path('api/v1/', include('api.urls')),
+    path('api/v1/', include('api.urls')),
+    path('api/v1/', include('inventory.urls')),
 ]
+

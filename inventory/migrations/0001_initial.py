@@ -52,7 +52,9 @@ class Migration(migrations.Migration):
             name='ProductVariant',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('product', models.ForeignKey(db_column='product_id', on_delete=models.CASCADE, related_name='variants', to='inventory.product')),
                 ('sku', models.TextField(unique=True)),
+
                 ('barcode', models.TextField(blank=True, null=True, unique=True)),
                 ('size', models.TextField(blank=True, null=True)),
                 ('color', models.TextField(blank=True, null=True)),
@@ -86,7 +88,9 @@ class Migration(migrations.Migration):
             name='Reservation',
             fields=[
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('variant', models.ForeignKey(db_column='variant_id', on_delete=models.CASCADE, related_name='reservations', to='inventory.productvariant')),
                 ('user_id', models.UUIDField()),
+
                 ('reserved_quantity', models.IntegerField()),
                 ('expires_at', models.DateTimeField()),
                 ('status', models.TextField(choices=[('active', 'Active'), ('completed', 'Completed'), ('expired', 'Expired')], default='active')),
