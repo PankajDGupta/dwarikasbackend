@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #06: Product Catalog API (Complete)
+- Spec #07: Checkout Reservation & Pessimistic Locking — **Complete**
 
 ## Current Goal
 
-- Implement Checkout Reservation & Pessimistic Locking (Spec #07)
+- Implement Order Confirmation & Atomic Stock Decrement (Spec #08)
 
 
 ## Completed
@@ -72,9 +72,38 @@ Update this file after every meaningful implementation change.
   - Built full test suite in `inventory/tests/test_views.py` verifying anonymous reads, RBAC writes/deletes, filtering/searching (including product ID), and N+1 query prevention (asserting 3 queries total on listing)
   - **Completed:** 2026-05-30T23:58:00+05:30
 
+- ✅ Spec #06 (Amended) - Multi-Category Product Catalog Extension (`inventory/models.py`, `inventory/serializers.py`, `inventory/filters.py`, `inventory/views.py`)
+  - **Analysis:** Verified the existing catalog fields (size, color, brand, category, image_url, description) are already sufficient for clothing at the variant level; identified missing fields for apparel: `product_type` discriminator, `material`, `gender_target`, `fit_type`
+  - Added `product_type` TEXT field to `Product` model with choices: `grocery`, `apparel`, `general` — defaults to `general`
+  - Added apparel-specific fields to `Product`: `material` (fabric composition), `gender_target` (men/women/unisex/boys/girls/none), `fit_type` (Slim Fit, Regular Fit, etc.)
+  - All new fields are nullable/defaulted — fully backward-compatible with existing grocery data
+  - Updated `ProductSerializer` and `ProductWriteSerializer` to expose all new fields
+  - Extended `ProductFilter` with `product_type`, `brand`, `category`, `gender_target` filters
+  - Extended `ProductListCreateView.search_fields` to include `brand`, `description`, `material`
+  - Created Django state migration `0002_product_multicategory_fields.py` (no DDL — models are unmanaged)
+  - Created Supabase DDL migration `supabase/snippets/002_product_catalog_multicategory.sql` with `ALTER TABLE`, backfill `UPDATE`, CHECK constraints, and indexes on `product_type` and `gender_target`
+  - Updated `context/feature-spec/spec06-Product_Catalog_API.md` — synced spec with actual implementation, added multi-category product type model documentation, expanded filter parameters table, and added apparel-specific acceptance criteria
+  - **Completed:** 2026-06-01T23:12:33+05:30
+
+- ✅ Spec #07 - Checkout Reservation & Pessimistic Locking (`inventory/checkout_views.py`, `inventory/serializers.py`, `inventory/urls.py`)
+  - Created `inventory/checkout_views.py` with three views:
+    - `CheckoutReserveView` — `POST /api/v1/checkout/reserve/`: acquires `SELECT ... FOR UPDATE NOWAIT` on `ProductVariant`, computes ATP, creates 10-minute `Reservation`
+    - `ReservationListView` — `GET /api/v1/checkout/reserve/list/`: returns caller's active non-expired holds with nested variant details
+    - `ReservationReleaseView` — `DELETE /api/v1/checkout/reserve/<uuid>/`: releases active reservation (owner or staff)
+  - Added `ReservationSerializer` to `inventory/serializers.py` with nested `ProductVariantSerializer`
+  - Updated `inventory/urls.py` with three new checkout routes under `checkout/reserve/`
+  - Entire checkout flow wrapped in `transaction.atomic()` with `select_for_update(nowait=True)` on both variant and active reservation rows
+  - ATP computed as `physical_stock - SUM(active, non-expired reservations)` inside the lock
+  - Returns 409 with `atp` and `requested` fields when stock insufficient; 503 on lock contention; 404/400 for bad input
+  - Created comprehensive test suite in `inventory/tests/test_checkout.py` (21 tests):
+    - Full input validation, auth, ATP calculation, expiry exclusion, release authorization tests
+    - Concurrency test: 10 threads race for last 1 unit — exactly 1 succeeds (HTTP 201); rest get 409/503
+    - Used `TransactionTestCase` for concurrency test so worker threads see committed setUp data
+    - Added `connections.close_all()` in thread teardown to allow clean PostgreSQL test DB drop
+  - All 21 tests pass against local Supabase PostgreSQL (port 54322)
+  - **Completed:** 2026-06-01T23:58:00+05:30
 
 
-## In Progress
 
 - None.
 
@@ -87,7 +116,7 @@ Update this file after every meaningful implementation change.
 | 04 | Database Models & Schema | `inventory/` | ✅ Complete |
 | 05 | RBAC Permissions | `api/` | ✅ Complete |
 | 06 | Product Catalog API | `inventory/` | ✅ Complete |
-| 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | 🔲 Not started |
+| 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | ✅ Complete |
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | 🔲 Not started |
 | 09 | Barcode Generation Endpoints | `inventory/` | 🔲 Not started |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | 🔲 Not started |
@@ -98,7 +127,7 @@ Update this file after every meaningful implementation change.
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 
-**Next immediate step:** Execute Spec #07 — Checkout Reservation & Pessimistic Locking.
+**Next immediate step:** Execute Spec #08 — Order Confirmation & Atomic Stock Decrement.
 
 
 ## Open Questions

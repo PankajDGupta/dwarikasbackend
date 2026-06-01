@@ -212,7 +212,76 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 
-## 4. Operational Ingestion & Hardware Integration
+---
+
+## 4. Local Development Environment & Tooling
+
+### Supabase Local Stack
+
+The project runs a **local Supabase Docker instance** during development. All database-related tasks (schema changes, data inspection, ad-hoc queries) in the local environment **must use the Supabase CLI** — do not use raw `psql` or Django migrations for DDL against this local stack.
+
+#### Running Services
+
+| Service | URL / Connection |
+|---|---|
+| **PostgreSQL DB** | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
+| **REST API** | `http://127.0.0.1:54321/rest/v1` |
+| **Studio (UI)** | `http://127.0.0.1:54323` |
+| **Auth / API** | `http://127.0.0.1:54321` |
+
+Verify the stack is up at any time with:
+```powershell
+supabase status
+```
+
+#### Supabase CLI — Database Commands
+
+All local database operations are executed via the Supabase CLI from the project root (`dwarikasbackend/`):
+
+```powershell
+# Run a single SQL statement
+supabase db query "SELECT * FROM public.products LIMIT 5;"
+
+# Inspect a table's schema
+supabase db query "SELECT column_name, data_type, column_default, is_nullable
+                   FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'products'
+                   ORDER BY ordinal_position;"
+
+# Apply a DDL change (one statement per call)
+supabase db query "ALTER TABLE public.products ADD COLUMN IF NOT EXISTS my_col TEXT;"
+```
+
+> **Important:** `supabase db query` executes **one SQL statement per call**. Multiple semicolon-separated statements in a single call will fail with `SQLSTATE 42601`. Always split multi-statement migrations into individual `supabase db query` calls.
+
+#### SQL Snippets Folder
+
+Schema migrations that are not managed by Django's migration system (i.e., Supabase DDL not covered by `manage.py migrate`) are stored as numbered SQL files in:
+
+```
+supabase/snippets/
+    001_initial_schema.sql        ← initial Supabase schema (profiles, products, etc.)
+    002_product_catalog_multicategory.sql  ← multi-category product type extension
+```
+
+These snippets document every DDL change applied to the local and production Supabase databases. When implementing a new spec that requires schema changes:
+1. Write the DDL as a new numbered snippet in `supabase/snippets/`
+2. Apply each statement individually using `supabase db query "..."`
+3. Verify the schema with a `SELECT ... FROM information_schema.columns` query
+4. Record the applied migration in `context/progress-tracker.md`
+
+#### Django Migration Strategy for Unmanaged Models
+
+All inventory ORM models (`Product`, `ProductVariant`, `Reservation`, `Order`) are declared with `managed = False`. This means:
+
+- **Django never runs DDL** (no `CREATE TABLE`, `ALTER TABLE`) against Supabase
+- `python manage.py migrate` only updates Django's internal migration state
+- **All DDL runs through the Supabase CLI** using the snippets above
+- Django migrations for unmanaged models serve as state-only records of the schema shape
+
+---
+
+## 5. Operational Ingestion & Hardware Integration
 
 ### Intelligent Document Processing (IDP) Bill Ingestion
 

@@ -13,8 +13,8 @@ class ProductListCreateView(generics.ListCreateAPIView):
     queryset = Product.objects.prefetch_related('variants').order_by('-created_at')
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ProductFilter
-    search_fields = ['name', 'hsn_code']
-    ordering_fields = ['created_at', 'name', 'gst_slab']
+    search_fields = ['name', 'hsn_code', 'brand', 'description', 'material']
+    ordering_fields = ['created_at', 'name', 'gst_slab', 'product_type']
 
     def get_serializer_class(self):
         if self.request.method == 'POST':

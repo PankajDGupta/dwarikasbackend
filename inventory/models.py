@@ -56,7 +56,17 @@ class Product(models.Model):
     Contains catalog-level metadata shared across all SKU variants.
     GST slab rates align with HSN-code-level tax classification used
     in the ONDC Beckn fulfillment flow (CGST + SGST routing).
+
+    product_type discriminates between grocery, apparel, and general merchandise
+    so that category-specific fields (dietary_type for food, material/gender_target/fit_type
+    for apparel) can be optionally populated without polluting unrelated entries.
     """
+    PRODUCT_TYPE_CHOICES = [
+        ('grocery', 'Grocery & FMCG'),
+        ('apparel', 'Apparel & Clothing'),
+        ('general', 'General Merchandise'),
+    ]
+
     DIETARY_CHOICES = [
         ('veg', 'Vegetarian'),
         ('non-veg', 'Non-Vegetarian'),
@@ -64,16 +74,58 @@ class Product(models.Model):
         ('none', 'Not Applicable'),
     ]
 
+    GENDER_TARGET_CHOICES = [
+        ('men', 'Men'),
+        ('women', 'Women'),
+        ('unisex', 'Unisex'),
+        ('boys', 'Boys'),
+        ('girls', 'Girls'),
+        ('none', 'Not Applicable'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.TextField()
     hsn_code = models.TextField()
     gst_slab = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
+
+    # Product classification — drives which optional fields apply
+    product_type = models.TextField(
+        choices=PRODUCT_TYPE_CHOICES,
+        default='general',
+        help_text="Determines the product category (grocery, apparel, general).",
+    )
+
+    # Common catalog fields (apply to all product types)
     brand = models.TextField(null=True, blank=True)
     category = models.TextField(null=True, blank=True)
     subcategory = models.TextField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     image_url = models.TextField(null=True, blank=True)
-    dietary_type = models.TextField(choices=DIETARY_CHOICES, default='none')
+
+    # Grocery-specific fields — only populate when product_type == 'grocery'
+    dietary_type = models.TextField(
+        choices=DIETARY_CHOICES,
+        default='none',
+        help_text="Vegetarian / Non-Veg classification. Leave as 'none' for non-food items.",
+    )
+
+    # Apparel-specific fields — only populate when product_type == 'apparel'
+    material = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Fabric or material composition (e.g., '100% Cotton', 'Polyester Blend').",
+    )
+    gender_target = models.TextField(
+        choices=GENDER_TARGET_CHOICES,
+        default='none',
+        help_text="Target gender for apparel items. Leave as 'none' for non-apparel.",
+    )
+    fit_type = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Garment fit descriptor (e.g., 'Slim Fit', 'Regular Fit', 'Oversized').",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -81,7 +133,7 @@ class Product(models.Model):
         db_table = 'products'
 
     def __str__(self):
-        return f"{self.name} (HSN: {self.hsn_code})"
+        return f"{self.name} (HSN: {self.hsn_code}, type: {self.product_type})"
 
 
 class ProductVariant(models.Model):

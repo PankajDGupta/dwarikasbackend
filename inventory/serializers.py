@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from inventory.models import Product, ProductVariant
+from inventory.models import Product, ProductVariant, Reservation
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -15,24 +15,70 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """
+    Full read serializer — returned on GET requests.
+
+    Includes all catalog metadata fields. Category-specific fields
+    (dietary_type for grocery; material, gender_target, fit_type for apparel)
+    are always present but will be null/default for non-applicable product types.
+    Clients should read product_type to decide which fields to render.
+    """
     variants = ProductVariantSerializer(many=True, read_only=True)
 
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'hsn_code', 'gst_slab', 'brand',
-            'category', 'subcategory', 'description', 'image_url',
-            'dietary_type', 'created_at', 'variants',
+            # Core identification
+            'id', 'name', 'hsn_code', 'gst_slab',
+            # Classification
+            'product_type',
+            # Common catalog metadata
+            'brand', 'category', 'subcategory', 'description', 'image_url',
+            # Grocery-specific
+            'dietary_type',
+            # Apparel-specific
+            'material', 'gender_target', 'fit_type',
+            # Timestamps & nested
+            'created_at', 'variants',
         ]
         read_only_fields = ['id', 'created_at']
 
 
 class ProductWriteSerializer(serializers.ModelSerializer):
-    """Slim write serializer — excludes nested variants to prevent accidental bulk writes."""
+    """
+    Slim write serializer — used for POST (create) and PATCH (update).
+
+    Excludes nested variants to prevent accidental bulk writes.
+    All optional fields (dietary_type, material, gender_target, fit_type)
+    are writable so staff can set product-type-specific metadata.
+    """
     class Meta:
         model = Product
         fields = [
-            'name', 'hsn_code', 'gst_slab', 'brand',
-            'category', 'subcategory', 'description', 'image_url',
+            # Core
+            'name', 'hsn_code', 'gst_slab',
+            # Classification
+            'product_type',
+            # Common catalog metadata
+            'brand', 'category', 'subcategory', 'description', 'image_url',
+            # Grocery-specific
             'dietary_type',
+            # Apparel-specific
+            'material', 'gender_target', 'fit_type',
         ]
+
+
+class ReservationSerializer(serializers.ModelSerializer):
+    """
+    Read serializer for Reservation rows.
+
+    Embeds the full ProductVariantSerializer so that consumers of the
+    GET /api/v1/checkout/reserve/list/ endpoint receive complete SKU
+    details (price, stock_quantity, etc.) alongside each active hold.
+    """
+    variant = ProductVariantSerializer(read_only=True)
+
+    class Meta:
+        model = Reservation
+        fields = ['id', 'variant', 'reserved_quantity', 'expires_at', 'status']
+        read_only_fields = ['id', 'expires_at', 'status']
