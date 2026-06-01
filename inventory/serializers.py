@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from inventory.models import Product, ProductVariant, Reservation
+from inventory.models import Product, ProductVariant, Reservation, Order
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -82,3 +82,14 @@ class ReservationSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = ['id', 'variant', 'reserved_quantity', 'expires_at', 'status']
         read_only_fields = ['id', 'expires_at', 'status']
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'user_id', 'total_amount', 'gst_amount',
+            'payment_method', 'payment_status', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+

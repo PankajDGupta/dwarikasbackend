@@ -9,6 +9,11 @@ from inventory.checkout_views import (
     ReservationListView,
     ReservationReleaseView,
 )
+from inventory.order_views import (
+    OrderConfirmView,
+    OrderListView,
+    OrderDetailView,
+)
 
 urlpatterns = [
     # ── Product Catalog (Spec #06) ─────────────────────────────────────────
@@ -23,4 +28,13 @@ urlpatterns = [
     path('checkout/reserve/', CheckoutReserveView.as_view(), name='checkout-reserve'),
     path('checkout/reserve/list/', ReservationListView.as_view(), name='reservation-list'),
     path('checkout/reserve/<uuid:reservation_id>/', ReservationReleaseView.as_view(), name='reservation-release'),
+
+    # ── Order Confirmation & Management (Spec #08) ──────────────────────────
+    # POST   /api/v1/orders/confirm/            — confirm a reservation into a paid order
+    # GET    /api/v1/orders/                    — list Caller's historical orders
+    # GET    /api/v1/orders/<id>/               — retrieve a single order
+    path('orders/confirm/', OrderConfirmView.as_view(), name='order-confirm'),
+    path('orders/', OrderListView.as_view(), name='order-list'),
+    path('orders/<uuid:id>/', OrderDetailView.as_view(), name='order-detail'),
 ]
+

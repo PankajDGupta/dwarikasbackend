@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #07: Checkout Reservation & Pessimistic Locking — **Complete**
+- Spec #08: Order Confirmation & Atomic Stock Decrement — **Complete**
 
 ## Current Goal
 
-- Implement Order Confirmation & Atomic Stock Decrement (Spec #08)
+- Implement Barcode Generation Endpoints (Spec #09)
 
 
 ## Completed
@@ -85,6 +85,16 @@ Update this file after every meaningful implementation change.
   - Updated `context/feature-spec/spec06-Product_Catalog_API.md` — synced spec with actual implementation, added multi-category product type model documentation, expanded filter parameters table, and added apparel-specific acceptance criteria
   - **Completed:** 2026-06-01T23:12:33+05:30
 
+- ✅ Spec #08 - Order Confirmation & Atomic Stock Decrement (`inventory/order_views.py`, `inventory/serializers.py`, `inventory/urls.py`)
+  - Created `inventory/order_views.py` with three views:
+    - `OrderConfirmView` — `POST /api/v1/orders/confirm/`: acquires locks on variant and reservation using a deadlock-free ordering (parent ProductVariant first, then Reservation), verifies no timeout/expiry, decrements stock atomically, completes reservation, and creates `Order` with GST computation.
+    - `OrderListView` — `GET /api/v1/orders/`: lists caller's historical orders (owner-isolated) or all orders for staff/managers.
+    - `OrderDetailView` — `GET /api/v1/orders/<uuid:id>/`: retrieves a single order with user isolation or staff RBAC.
+  - Added `OrderSerializer` to `inventory/serializers.py`.
+  - Added order confirmation, list, and detail routes to `inventory/urls.py`.
+  - Built full test suite in `inventory/tests/test_orders.py` verifying authentication, validations, success paths with GST rounding, expiry guards, user isolation, stock guards, and transaction rollback integrity.
+  - **Completed:** 2026-06-01T23:59:00+05:30
+
 - ✅ Spec #07 - Checkout Reservation & Pessimistic Locking (`inventory/checkout_views.py`, `inventory/serializers.py`, `inventory/urls.py`)
   - Created `inventory/checkout_views.py` with three views:
     - `CheckoutReserveView` — `POST /api/v1/checkout/reserve/`: acquires `SELECT ... FOR UPDATE NOWAIT` on `ProductVariant`, computes ATP, creates 10-minute `Reservation`
@@ -117,7 +127,7 @@ Update this file after every meaningful implementation change.
 | 05 | RBAC Permissions | `api/` | ✅ Complete |
 | 06 | Product Catalog API | `inventory/` | ✅ Complete |
 | 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | ✅ Complete |
-| 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | 🔲 Not started |
+| 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | ✅ Complete |
 | 09 | Barcode Generation Endpoints | `inventory/` | 🔲 Not started |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | 🔲 Not started |
 | 11 | Document AI OCR Worker | `tasks/` | 🔲 Not started |
@@ -127,7 +137,7 @@ Update this file after every meaningful implementation change.
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 
-**Next immediate step:** Execute Spec #08 — Order Confirmation & Atomic Stock Decrement.
+**Next immediate step:** Execute Spec #09 — Barcode Generation Endpoints.
 
 
 ## Open Questions
