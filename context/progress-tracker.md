@@ -136,6 +136,8 @@ Update this file after every meaningful implementation change.
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | 🔲 Not started |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
+| 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
+| 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
 **Next immediate step:** Execute Spec #09 — Barcode Generation Endpoints.
 
