@@ -119,7 +119,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-### Full Feature Spec Roadmap (Specs 04–16)
+### Full Feature Spec Roadmap (Specs 04–19)
 
 | Spec | Feature | Django App | Status |
 |------|---------|------------|--------|
@@ -129,6 +129,7 @@ Update this file after every meaningful implementation change.
 | 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | ✅ Complete |
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | ✅ Complete |
 | 09 | Barcode Generation Endpoints | `inventory/` | 🔲 Not started |
+| 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | 🔲 Not started — spec written 2026-06-03 — **depends on Spec 09** |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | 🔲 Not started |
 | 11 | Document AI OCR Worker | `tasks/` | 🔲 Not started |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | 🔲 Not started |
@@ -139,7 +140,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #09 — Barcode Generation Endpoints.
+**Next immediate step:** Execute Spec #09 — Barcode Generation Endpoints, then Spec #09b — Loose Product Repackaging.
 
 
 ## Open Questions
