@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'inventory.apps.InventoryConfig',   # Spec #04 — unmanaged ORM mirrors of Supabase schema
     'tasks.apps.TasksConfig',
     'ondc.apps.OndcConfig',
+    'whatsapp.apps.WhatsappConfig',
 ]
 
 

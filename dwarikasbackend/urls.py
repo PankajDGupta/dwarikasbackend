@@ -16,5 +16,6 @@ urlpatterns = [
     path('api/v1/', include('inventory.urls')),
     path('api/v1/', include('tasks.urls')),
     path('api/v1/', include('ondc.urls')),
+    path('api/v1/', include('whatsapp.urls')),
 ]
 

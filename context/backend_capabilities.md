@@ -926,9 +926,84 @@ Endpoints implementing ONDC Beckn Protocol v1.2.5. All endpoints return HTTP 202
 Calls must contain an `Authorization` header carrying an Ed25519 signature verified against the ONDC registry key:
 `Authorization: Signature keyId="...",algorithm="ed25519",created="...",expires="...",headers="(created) (expires) digest",signature="..."`
 If `ONDC_REGISTRY_PUBLIC_KEY_B64` is not configured, signature verification is bypassed for local development/testing.
-
+ 
 ---
-
+ 
+#### 5.10 WhatsApp Commerce Engine (Spec #14)
+ 
+Endpoints for Meta WhatsApp Business API webhook integration.
+ 
+##### `GET /api/v1/whatsapp/webhook/` — Webhook verification challenge
+ 
+| Property | Value |
+|---|---|
+| **Auth** | Public |
+ 
+**Query Parameters:**
+ 
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `hub.mode` | string | Yes | Must be `"subscribe"` |
+| `hub.verify_token` | string | Yes | Must match `WA_VERIFY_TOKEN` |
+| `hub.challenge` | string | Yes | Challenge string from Meta |
+ 
+**Response (200):** Plain text challenge string.
+ 
+---
+ 
+##### `POST /api/v1/whatsapp/webhook/` — Process inbound WhatsApp message
+ 
+| Property | Value |
+|---|---|
+| **Auth** | Public (verified via `X-Hub-Signature-256`) |
+ 
+**Security / Signature Validation:**
+Uses HMAC-SHA256 of the request payload using `WA_APP_SECRET` to verify authenticity. The computed signature must match the `X-Hub-Signature-256` header (with `sha256=` prefix). Signature check is bypassed in local development if `WA_APP_SECRET` is not set.
+ 
+**Request Body (Meta Webhook Structure):**
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15555555555",
+              "phone_number_id": "123456789"
+            },
+            "contacts": [{"profile": {"name": "User Name"}, "wa_id": "12345"}],
+            "messages": [
+              {
+                "from": "12345",
+                "id": "wamid.HBgLMjMzNzg0NTQ2MTEVAgASGBIwRDQ4NzhDM0E4RjkzRjAyOUQA",
+                "timestamp": "1645600000",
+                "text": {"body": "check stock SILK-SCARF-RED"},
+                "type": "text"
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
+```
+ 
+**Key Behaviours:**
+- **Status Updates/Delivery Receipts**: Payloads without the `messages` key are ignored and return `200` with `status: ignored`.
+- **Intent Parsing**: Incoming text is parsed into:
+  - `catalog` -> Sends a WhatsApp interactive list picker showing top 10 products.
+  - `stock_check` -> Extracts SKU from message, calculates real-time Available-to-Promise (ATP = physical stock - active reservations), and sends stock details along with a CTA web button.
+  - `order_status` -> Sends instructions to track orders on the website.
+  - `fallback` -> Default help menu.
+ 
+---
+ 
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -987,12 +1062,12 @@ Some endpoints include additional context fields:
 | #11 | Document AI OCR Worker | _(internal task worker — `tasks/process-invoice/`)_ |
 | #12 | HITL Invoice Validation & Confirmation | `invoices/<id>/review/`, `invoices/line-items/<id>/`, `invoices/<id>/confirm/` |
 | #13 | ONDC Seller Node (Beckn Protocol) | `ondc/search/`, `ondc/select/`, `ondc/init/`, `ondc/confirm/`, `ondc/status/`, `ondc/cancel/` |
-
+| #14 | WhatsApp Commerce Engine | `whatsapp/webhook/` |
+ 
 #### Not Yet Implemented — Backend Development Pending
-
+ 
 | Spec | Feature | Frontend Impact |
 |---|---|---|
-| #14 | WhatsApp Commerce Engine | Conversational commerce channel |
 | #15 | External Partner API Gateway | Third-party API access |
 | #16 | Security Hardening & Rate Limiting | Infrastructure-level — may introduce rate-limit headers |
 | #17 | Payment Gateway (Razorpay) | Payment processing — will add payment initiation/webhook endpoints |
@@ -1055,4 +1130,9 @@ POST    /api/v1/ondc/confirm/                              → Payment confirmat
 POST    /api/v1/ondc/status/                               → Order status check
 POST    /api/v1/ondc/cancel/                               → Release reservation or cancel order
 POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Task background worker
+ 
+# ── WhatsApp Commerce Engine (Public Webhooks / Meta Challenge-Signature Verified) ─
+GET     /api/v1/whatsapp/webhook/                          → WhatsApp webhook verification challenge
+POST    /api/v1/whatsapp/webhook/                          → Process incoming WhatsApp message
+
 ```
