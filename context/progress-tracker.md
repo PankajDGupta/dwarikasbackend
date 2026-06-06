@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #12: HITL Invoice Validation & Confirmation — **Complete**
+- Spec #13: ONDC Seller Node (Beckn Protocol) — **Complete**
 
 ## Current Goal
 
-- Implement ONDC Seller Node (Beckn Protocol) (Spec #13)
+- Implement WhatsApp Commerce Engine (Spec #14)
 
 
 ## Completed
@@ -156,6 +156,15 @@ Update this file after every meaningful implementation change.
   - Built comprehensive unit and integration tests verifying permissions, validation flows, transaction integrity, and idempotency.
   - **Completed:** 2026-06-06T20:50:00+05:30
 
+- ✅ Spec #13 - ONDC Seller Node (Beckn Protocol Integration) (`ondc/`)
+  - Created new Django app `ondc` and configured it in settings.
+  - Implemented Ed25519 request signature verification conforming to Beckn signature spec.
+  - Implemented Beckn context and catalog payload builder helpers in `ondc/beckn_builder.py`.
+  - Implemented asynchronous task queueing / dispatching mechanism using Google Cloud Tasks and thread-based local worker simulation.
+  - Implemented core views for discovery (`/search`), selection (`/select`), fulfillment initialization (`/init`), payment confirmation (`/confirm`), status polling (`/status`), and order/reservation cancellation (`/cancel`).
+  - Added comprehensive integration test suite covering signature verification, ATP calculations, tax calculations (local CGST/SGST vs interstate IGST), and inventory atomic mutations.
+  - **Completed:** 2026-06-06T21:50:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -172,14 +181,14 @@ Update this file after every meaningful implementation change.
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | ✅ Complete |
 | 11 | Document AI OCR Worker | `tasks/` | ✅ Complete |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | ✅ Complete |
-| 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | 🔲 Not started |
+| 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | ✅ Complete |
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | 🔲 Not started |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #13 — ONDC Seller Node (Beckn Protocol).
+**Next immediate step:** Execute Spec #14 — WhatsApp Commerce Engine.
 
 
 ## Open Questions

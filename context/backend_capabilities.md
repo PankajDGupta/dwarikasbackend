@@ -908,6 +908,25 @@ Returns only the calling user's active, non-expired reservations with full varia
 
 > **Key Behaviour:** Commits stock increments atomically by SKU. Re-confirming an already confirmed invoice acts as an idempotent success response (200) without re-applying stock. Unmatched SKUs log a warning but do not block confirmation.
 
+
+---
+
+#### 5.9 ONDC Seller Node (Beckn Protocol) (Spec #13)
+
+Endpoints implementing ONDC Beckn Protocol v1.2.5. All endpoints return HTTP 202 immediately with an ACK and delegate the actual business logic asynchronously to a background task, which dispatches a callback POST to BAP's callback URI (`bap_uri/on_<action>`).
+
+##### `POST /api/v1/ondc/search/` — Discovery Catalog Query
+##### `POST /api/v1/ondc/select/` — Item Selection & Reservation Hold
+##### `POST /api/v1/ondc/init/` — Billing & Shipping Initialisation (GST CGST/SGST/IGST tax calculation)
+##### `POST /api/v1/ondc/confirm/` — Final Order Payment & Confirmation
+##### `POST /api/v1/ondc/status/` — Order Status Query
+##### `POST /api/v1/ondc/cancel/` — Release Reservation or Cancel Confirmed Order
+
+**Verification / Signature Security:**
+Calls must contain an `Authorization` header carrying an Ed25519 signature verified against the ONDC registry key:
+`Authorization: Signature keyId="...",algorithm="ed25519",created="...",expires="...",headers="(created) (expires) digest",signature="..."`
+If `ONDC_REGISTRY_PUBLIC_KEY_B64` is not configured, signature verification is bypassed for local development/testing.
+
 ---
 
 ### 6. Standard Error Response Format
@@ -967,12 +986,12 @@ Some endpoints include additional context fields:
 | #10 | Invoice Upload & OCR Dispatch | `invoices/upload/`, `invoices/`, `invoices/<id>/` |
 | #11 | Document AI OCR Worker | _(internal task worker — `tasks/process-invoice/`)_ |
 | #12 | HITL Invoice Validation & Confirmation | `invoices/<id>/review/`, `invoices/line-items/<id>/`, `invoices/<id>/confirm/` |
+| #13 | ONDC Seller Node (Beckn Protocol) | `ondc/search/`, `ondc/select/`, `ondc/init/`, `ondc/confirm/`, `ondc/status/`, `ondc/cancel/` |
 
 #### Not Yet Implemented — Backend Development Pending
 
 | Spec | Feature | Frontend Impact |
 |---|---|---|
-| #13 | ONDC Seller Node (Beckn Protocol) | External marketplace integration |
 | #14 | WhatsApp Commerce Engine | Conversational commerce channel |
 | #15 | External Partner API Gateway | Third-party API access |
 | #16 | Security Hardening & Rate Limiting | Infrastructure-level — may introduce rate-limit headers |
@@ -1027,4 +1046,13 @@ POST    /api/v1/invoices/<uuid:id>/confirm/                → Confirm invoice s
 
 # ── Internal Task Workers (Cloud Tasks Only) ────────────────────────────
 POST    /api/v1/tasks/process-invoice/                     → Process invoice background worker
+
+# ── ONDC Seller Node (Public Webhooks / Beckn Signature Verified) ─────────────
+POST    /api/v1/ondc/search/                               → Discovery catalog search
+POST    /api/v1/ondc/select/                               → Selection stock reservation hold
+POST    /api/v1/ondc/init/                                 → Billing details initialisation
+POST    /api/v1/ondc/confirm/                              → Payment confirmation & stock decrement
+POST    /api/v1/ondc/status/                               → Order status check
+POST    /api/v1/ondc/cancel/                               → Release reservation or cancel order
+POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Task background worker
 ```

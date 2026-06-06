@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'api.apps.ApiConfig',
     'inventory.apps.InventoryConfig',   # Spec #04 — unmanaged ORM mirrors of Supabase schema
     'tasks.apps.TasksConfig',
+    'ondc.apps.OndcConfig',
 ]
 
 
