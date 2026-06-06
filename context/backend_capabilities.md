@@ -817,6 +817,99 @@ Returns only the calling user's active, non-expired reservations with full varia
 
 ---
 
+#### 5.8 HITL Invoice Validation & Confirmation (Spec #12)
+
+##### `GET /api/v1/invoices/<uuid:id>/review/` — Review Invoice Details
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response (200):**
+```json
+{
+  "id": "<uuid>",
+  "invoice_number": "INV-2026-001",
+  "vendor_name": "Lal Qila Foods",
+  "vendor_gstin": "07AABCU9603R1ZX",
+  "issued_at": "2026-06-01",
+  "gcs_object_path": "invoices/...",
+  "status": "review",
+  "uploaded_by": "<uuid>",
+  "created_at": "2026-06-01T10:00:00Z",
+  "signed_image_url": "https://storage.googleapis.com/...",
+  "review_summary": {
+    "total_items": 1,
+    "needs_review_count": 0
+  },
+  "line_items": [
+    {
+      "id": "<uuid>",
+      "sku": "DW-RICE-1KG",
+      "description": "Basmati Rice 1kg Pack",
+      "quantity": 100,
+      "unit_price": "85.00",
+      "gst_rate": "5.00",
+      "confidence_score": "0.950",
+      "needs_review": false
+    }
+  ]
+}
+```
+
+> **Frontend note:** `signed_image_url` provides a 30-minute temporary signed URL for side-by-side rendering in the HITL dashboard.
+
+---
+
+##### `PATCH /api/v1/invoices/line-items/<uuid:id>/` — Correct Line Item
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "sku": "DW-RICE-1KG",
+  "quantity": 105,
+  "unit_price": "84.50"
+}
+```
+
+> **Key Behaviour:** Clear `needs_review` flag to `false` automatically when a line item is corrected. Edits are blocked (409) if the invoice is already confirmed.
+
+**Response (200):** Returns the updated `InvoiceLineItem` object.
+
+---
+
+##### `POST /api/v1/invoices/<uuid:id>/confirm/` — Confirm Invoice Stock Ingestion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response (200):**
+```json
+{
+  "invoice_id": "<uuid>",
+  "status": "confirmed",
+  "stock_updates_applied": 1,
+  "matched_skus": ["DW-RICE-1KG"],
+  "unmatched_skus": []
+}
+```
+
+**Error Responses:**
+
+| Status | Condition |
+|---|---|
+| `409` | Invoice not in `review` or `confirmed` status |
+| `422` | Invoice contains items that still have `needs_review = true` |
+
+> **Key Behaviour:** Commits stock increments atomically by SKU. Re-confirming an already confirmed invoice acts as an idempotent success response (200) without re-applying stock. Unmatched SKUs log a warning but do not block confirmation.
+
+---
+
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -873,12 +966,12 @@ Some endpoints include additional context fields:
 | #09b | Loose Product Repackaging | `packaging-jobs/`, `packaging-jobs/<id>/` |
 | #10 | Invoice Upload & OCR Dispatch | `invoices/upload/`, `invoices/`, `invoices/<id>/` |
 | #11 | Document AI OCR Worker | _(internal task worker — `tasks/process-invoice/`)_ |
+| #12 | HITL Invoice Validation & Confirmation | `invoices/<id>/review/`, `invoices/line-items/<id>/`, `invoices/<id>/confirm/` |
 
 #### Not Yet Implemented — Backend Development Pending
 
 | Spec | Feature | Frontend Impact |
 |---|---|---|
-| #12 | HITL Invoice Validation & Confirmation | Admin UI will need endpoints for reviewing/confirming parsed invoices |
 | #13 | ONDC Seller Node (Beckn Protocol) | External marketplace integration |
 | #14 | WhatsApp Commerce Engine | Conversational commerce channel |
 | #15 | External Partner API Gateway | Third-party API access |
@@ -926,6 +1019,11 @@ GET     /api/v1/packaging-jobs/<uuid:id>/                  → Packaging job det
 POST    /api/v1/invoices/upload/                           → Upload invoice file
 GET     /api/v1/invoices/                                  → List invoices
 GET     /api/v1/invoices/<uuid:id>/                        → Invoice detail + signed URL
+
+# ── HITL Invoice Validation & Confirmation (Staff/Manager) ──────────────
+GET     /api/v1/invoices/<uuid:id>/review/                 → Review invoice details + signed URL
+PATCH   /api/v1/invoices/line-items/<uuid:id>/             → Correct line item fields
+POST    /api/v1/invoices/<uuid:id>/confirm/                → Confirm invoice stock ingestion
 
 # ── Internal Task Workers (Cloud Tasks Only) ────────────────────────────
 POST    /api/v1/tasks/process-invoice/                     → Process invoice background worker

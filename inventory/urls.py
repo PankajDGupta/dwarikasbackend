@@ -17,6 +17,7 @@ from inventory.order_views import (
 from inventory.barcode_views import Code128BarcodeView, EAN13BarcodeView
 from inventory.packaging_views import PackagingJobListCreateView, PackagingJobDetailView
 from inventory.invoice_views import InvoiceUploadView, InvoiceListView, InvoiceDetailView
+from inventory.hitl_views import InvoiceReviewView, LineItemUpdateView, InvoiceConfirmView
 
 urlpatterns = [
     # ── Product Catalog (Spec #06) ─────────────────────────────────────────
@@ -52,5 +53,10 @@ urlpatterns = [
     path('invoices/upload/', InvoiceUploadView.as_view(), name='invoice-upload'),
     path('invoices/', InvoiceListView.as_view(), name='invoice-list'),
     path('invoices/<uuid:id>/', InvoiceDetailView.as_view(), name='invoice-detail'),
+
+    # ── HITL Invoice Validation & Confirmation (Spec #12) ──────────────────
+    path('invoices/<uuid:id>/review/', InvoiceReviewView.as_view(), name='invoice-review'),
+    path('invoices/line-items/<uuid:id>/', LineItemUpdateView.as_view(), name='line-item-update'),
+    path('invoices/<uuid:id>/confirm/', InvoiceConfirmView.as_view(), name='invoice-confirm'),
 ]
 

@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #10: Invoice Upload & Cloud Tasks Dispatch — **Complete**
+- Spec #12: HITL Invoice Validation & Confirmation — **Complete**
 
 ## Current Goal
 
-- Implement Document AI OCR Worker (Spec #11) / HITL Invoice Validation & Confirmation (Spec #12)
+- Implement ONDC Seller Node (Beckn Protocol) (Spec #13)
 
 
 ## Completed
@@ -149,6 +149,13 @@ Update this file after every meaningful implementation change.
   - Built comprehensive unit and integration tests covering security, payload format, file download fallback, OpenCV prep, Document AI parsing, DB transactions, and failure state transitions.
   - **Completed:** 2026-06-06T20:35:00+05:30
 
+- ✅ Spec #12 - HITL Invoice Validation & Confirmation (`inventory/hitl_views.py`, `inventory/urls.py`, `inventory/tests/test_hitl.py`)
+  - Implemented `InvoiceReviewView` returning detailed invoice fields, line items, and a signed GCS URL for visualization.
+  - Implemented `LineItemUpdateView` supporting manual corrections of SKU, quantity, unit price, and tax, while clearing `needs_review` flag and blocking edits on already confirmed invoices.
+  - Implemented `InvoiceConfirmView` committing stock additions atomically using `django.db.transaction.atomic` for all matched SKUs, changing invoice status to `'confirmed'`, and logging unmatched items.
+  - Built comprehensive unit and integration tests verifying permissions, validation flows, transaction integrity, and idempotency.
+  - **Completed:** 2026-06-06T20:50:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -164,7 +171,7 @@ Update this file after every meaningful implementation change.
 | 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | ✅ Complete |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | ✅ Complete |
 | 11 | Document AI OCR Worker | `tasks/` | ✅ Complete |
-| 12 | HITL Invoice Validation & Confirmation | `inventory/` | 🔲 Not started |
+| 12 | HITL Invoice Validation & Confirmation | `inventory/` | ✅ Complete |
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | 🔲 Not started |
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | 🔲 Not started |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
@@ -172,7 +179,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #12 — HITL Invoice Validation & Confirmation.
+**Next immediate step:** Execute Spec #13 — ONDC Seller Node (Beckn Protocol).
 
 
 ## Open Questions
