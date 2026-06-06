@@ -872,12 +872,12 @@ Some endpoints include additional context fields:
 | #09 | Barcode Generation | `barcodes/<sku>/code128/`, `barcodes/<sku>/ean13/` |
 | #09b | Loose Product Repackaging | `packaging-jobs/`, `packaging-jobs/<id>/` |
 | #10 | Invoice Upload & OCR Dispatch | `invoices/upload/`, `invoices/`, `invoices/<id>/` |
+| #11 | Document AI OCR Worker | _(internal task worker — `tasks/process-invoice/`)_ |
 
 #### Not Yet Implemented — Backend Development Pending
 
 | Spec | Feature | Frontend Impact |
 |---|---|---|
-| #11 | Document AI OCR Worker | Background worker — no direct frontend API; populates invoice `line_items` and transitions `status` |
 | #12 | HITL Invoice Validation & Confirmation | Admin UI will need endpoints for reviewing/confirming parsed invoices |
 | #13 | ONDC Seller Node (Beckn Protocol) | External marketplace integration |
 | #14 | WhatsApp Commerce Engine | Conversational commerce channel |
@@ -926,4 +926,7 @@ GET     /api/v1/packaging-jobs/<uuid:id>/                  → Packaging job det
 POST    /api/v1/invoices/upload/                           → Upload invoice file
 GET     /api/v1/invoices/                                  → List invoices
 GET     /api/v1/invoices/<uuid:id>/                        → Invoice detail + signed URL
+
+# ── Internal Task Workers (Cloud Tasks Only) ────────────────────────────
+POST    /api/v1/tasks/process-invoice/                     → Process invoice background worker
 ```

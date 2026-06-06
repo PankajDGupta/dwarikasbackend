@@ -140,6 +140,15 @@ Update this file after every meaningful implementation change.
   - Created a robust unit and integration testing suite validating size limits, format validation, permissions, and fallback mechanisms.
   - **Completed:** 2026-06-06T18:50:00+05:30
 
+- ✅ Spec #11 - Document AI OCR Worker (`tasks/document_ai_service.py`, `tasks/image_preprocessing.py`, `tasks/views.py`, `tasks/urls.py`, `inventory/tasks_service.py`)
+  - Created new Django app `tasks` and configured it in settings.
+  - Implemented OpenCV image preprocessing pipeline (`preprocess_image`) with greyscale, Otsu binarisation, morphological noise reduction, and deskewing.
+  - Implemented Google Document AI client integration with trained invoice schema parsing, confidence scoring (review threshold 0.90), and mock parser fallback for test environments.
+  - Implemented Cloud Tasks handler `ProcessInvoiceTaskView` supporting GCS downloads, local fallback file reads (`file:///`), transactional updates (`transaction.atomic`), and idempotency checks.
+  - Updated simulated local Cloud Tasks enqueuer thread to attach `X-CloudTasks-TaskName` header.
+  - Built comprehensive unit and integration tests covering security, payload format, file download fallback, OpenCV prep, Document AI parsing, DB transactions, and failure state transitions.
+  - **Completed:** 2026-06-06T20:35:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -154,7 +163,7 @@ Update this file after every meaningful implementation change.
 | 09 | Barcode Generation Endpoints | `inventory/` | ✅ Complete |
 | 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | ✅ Complete |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | ✅ Complete |
-| 11 | Document AI OCR Worker | `tasks/` | 🔲 Not started |
+| 11 | Document AI OCR Worker | `tasks/` | ✅ Complete |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | 🔲 Not started |
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | 🔲 Not started |
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | 🔲 Not started |
@@ -163,7 +172,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #11 — Document AI OCR Worker.
+**Next immediate step:** Execute Spec #12 — HITL Invoice Validation & Confirmation.
 
 
 ## Open Questions

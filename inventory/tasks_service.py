@@ -33,7 +33,11 @@ def _local_worker_dispatch(url: str, payload: dict):
     def run():
         try:
             logger.info(f"Local Tasks: Dispatching POST request to {url}")
-            response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
+            headers = {
+                'Content-Type': 'application/json',
+                'X-CloudTasks-TaskName': f'local-task-{uuid.uuid4()}'
+            }
+            response = requests.post(url, json=payload, headers=headers)
             logger.info(f"Local Tasks: Received response {response.status_code} from {url}")
         except Exception as e:
             logger.warning(f"Local Tasks: Failed to dispatch request to {url}: {e} (Expected in offline/test environments)")
