@@ -13,6 +13,10 @@ Implement the secured external integration endpoints used by corporate ERP syste
 - Custom authentication class: `ExternalApiKeyAuthentication`
 - Custom permission class: `HasValidRequestSignature`
 - Management command: `python manage.py create_api_key --partner-name "ERP System"` (outputs raw key once, stores hash)
+- Admin endpoints (for API key lifecycle management via Admin UI):
+  - `GET /api/v1/admin/api-keys/` — List all external partner API keys (Manager role required)
+  - `POST /api/v1/admin/api-keys/` — Create a new external API key (Manager role required; returns raw key in response once)
+  - `POST /api/v1/admin/api-keys/<uuid:pk>/revoke/` — Revoke (deactivate) an active API key (Manager role required)
 
 ---
 
@@ -188,13 +192,77 @@ class Command(BaseCommand):
 ### `inventory/external_views.py` — New file
 
 ```python
+import hashlib
+import secrets
 from django.db.models import F
-from rest_framework import status
+from rest_framework import status, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.external_auth import ExternalApiKeyAuthentication, HasValidRequestSignature
-from inventory.models import ProductVariant, Order
+from api.permissions import IsManager
+from inventory.models import ProductVariant, Order, ExternalApiKey
+
+
+class ExternalApiKeySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExternalApiKey
+        fields = ['id', 'partner_name', 'is_active', 'created_at']
+        read_only_fields = ['id', 'is_active', 'created_at']
+
+
+class AdminApiKeyListCreateView(APIView):
+    """
+    GET /api/v1/admin/api-keys/
+    Lists all external partner API keys. Restricted to Managers.
+
+    POST /api/v1/admin/api-keys/
+    Generates a new API key for a partner, hashes it, and returns the raw key ONCE.
+    Restricted to Managers.
+    """
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        keys = ExternalApiKey.objects.all().order_by('-created_at')
+        serializer = ExternalApiKeySerializer(keys, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        partner_name = request.data.get('partner_name')
+        if not partner_name:
+            return Response({'error': 'partner_name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        raw_key = secrets.token_urlsafe(48)
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+
+        key = ExternalApiKey.objects.create(
+            partner_name=partner_name,
+            key_hash=key_hash,
+            is_active=True
+        )
+
+        serializer = ExternalApiKeySerializer(key)
+        data = serializer.data
+        data['raw_key'] = raw_key  # Returned ONLY once here
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class AdminApiKeyRevokeView(APIView):
+    """
+    POST /api/v1/admin/api-keys/<uuid:pk>/revoke/
+    Revokes (deactivates) an active API key. Restricted to Managers.
+    """
+    permission_classes = [IsManager]
+
+    def post(self, request, pk):
+        try:
+            key = ExternalApiKey.objects.get(pk=pk)
+        except ExternalApiKey.DoesNotExist:
+            return Response({'error': 'API key not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        key.is_active = False
+        key.save()
+        return Response({'message': 'API key revoked successfully.'}, status=status.HTTP_200_OK)
 
 
 class ExternalInventorySyncView(APIView):
@@ -287,14 +355,21 @@ class ExternalShipmentUpdateView(APIView):
 
 ---
 
-### `inventory/urls.py` — Add external routes
+### `inventory/urls.py` — Add external and admin routes
 
 ```python
-from inventory.external_views import ExternalInventorySyncView, ExternalShipmentUpdateView
+from inventory.external_views import (
+    ExternalInventorySyncView,
+    ExternalShipmentUpdateView,
+    AdminApiKeyListCreateView,
+    AdminApiKeyRevokeView,
+)
 
 urlpatterns += [
     path('external/inventory/sync/', ExternalInventorySyncView.as_view(), name='external-inventory-sync'),
     path('external/shipments/update/', ExternalShipmentUpdateView.as_view(), name='external-shipment-update'),
+    path('admin/api-keys/', AdminApiKeyListCreateView.as_view(), name='admin-api-key-list-create'),
+    path('admin/api-keys/<uuid:pk>/revoke/', AdminApiKeyRevokeView.as_view(), name='admin-api-key-revoke'),
 ]
 ```
 
@@ -317,6 +392,9 @@ REST_FRAMEWORK = {
 ## Acceptance Criteria
 
 - [ ] `python manage.py create_api_key --partner-name "ERP Test"` creates a row in `external_api_keys` and prints the raw key
+- [ ] `GET /api/v1/admin/api-keys/` requires Manager role and returns a list of all API keys (excluding the key hash)
+- [ ] `POST /api/v1/admin/api-keys/` requires Manager role, takes `partner_name`, generates a new API key, stores the hash, and returns the raw key ONCE in the response
+- [ ] `POST /api/v1/admin/api-keys/<uuid:pk>/revoke/` requires Manager role and updates `is_active` to `False` for the specified key
 - [ ] Calling `/external/inventory/sync/` without `X-Dwarikas-Api-Key` returns 401
 - [ ] Calling with a valid API key but missing `X-Dwarikas-Signature` returns 401
 - [ ] Calling with an expired timestamp (> 5 min old) returns 401

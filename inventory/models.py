@@ -254,6 +254,8 @@ class Order(models.Model):
     gst_amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_method = models.TextField(choices=PAYMENT_METHOD_CHOICES)
     payment_status = models.TextField(choices=PAYMENT_STATUS_CHOICES, default='pending')
+    carrier_status = models.TextField(null=True, blank=True)
+    tracking_reference = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -370,4 +372,19 @@ class InvoiceLineItem(models.Model):
 
     def __str__(self):
         return f"InvoiceLineItem({self.id}, sku={self.sku}, qty={self.quantity})"
+
+
+class ExternalApiKey(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    partner_name = models.TextField()
+    key_hash = models.TextField(unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'external_api_keys'
+
+    def __str__(self):
+        return f"ExternalApiKey({self.partner_name}, active={self.is_active})"
 

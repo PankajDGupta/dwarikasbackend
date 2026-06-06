@@ -1063,12 +1063,8 @@ Some endpoints include additional context fields:
 | #12 | HITL Invoice Validation & Confirmation | `invoices/<id>/review/`, `invoices/line-items/<id>/`, `invoices/<id>/confirm/` |
 | #13 | ONDC Seller Node (Beckn Protocol) | `ondc/search/`, `ondc/select/`, `ondc/init/`, `ondc/confirm/`, `ondc/status/`, `ondc/cancel/` |
 | #14 | WhatsApp Commerce Engine | `whatsapp/webhook/` |
+| #15 | External Partner API Gateway | `external/inventory/sync/`, `external/shipments/update/`, `admin/api-keys/`, `admin/api-keys/<uuid:pk>/revoke/` |
  
-#### Not Yet Implemented — Backend Development Pending
- 
-| Spec | Feature | Frontend Impact |
-|---|---|---|
-| #15 | External Partner API Gateway | Third-party API access |
 | #16 | Security Hardening & Rate Limiting | Infrastructure-level — may introduce rate-limit headers |
 | #17 | Payment Gateway (Razorpay) | Payment processing — will add payment initiation/webhook endpoints |
 | #18 | POS Cash Sales & In-Store Billing | Point-of-sale terminal backend |
@@ -1135,4 +1131,10 @@ POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Ta
 GET     /api/v1/whatsapp/webhook/                          → WhatsApp webhook verification challenge
 POST    /api/v1/whatsapp/webhook/                          → Process incoming WhatsApp message
 
+# ── External Partner & Admin API Key Gateway (Completed) ──────────────────
+POST    /api/v1/external/inventory/sync/                   → Reconcile ERP inventory stock delta
+PATCH   /api/v1/external/shipments/update/                 → Update shipment status from logistics webhook
+GET     /api/v1/admin/api-keys/                            → List external partner API keys (Manager only)
+POST    /api/v1/admin/api-keys/                            → Create external partner API key (Manager only)
+POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/            → Revoke external partner API key (Manager only)
 ```

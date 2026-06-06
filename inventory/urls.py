@@ -18,6 +18,12 @@ from inventory.barcode_views import Code128BarcodeView, EAN13BarcodeView
 from inventory.packaging_views import PackagingJobListCreateView, PackagingJobDetailView
 from inventory.invoice_views import InvoiceUploadView, InvoiceListView, InvoiceDetailView
 from inventory.hitl_views import InvoiceReviewView, LineItemUpdateView, InvoiceConfirmView
+from inventory.external_views import (
+    ExternalInventorySyncView,
+    ExternalShipmentUpdateView,
+    AdminApiKeyListCreateView,
+    AdminApiKeyRevokeView,
+)
 
 urlpatterns = [
     # ── Product Catalog (Spec #06) ─────────────────────────────────────────
@@ -58,5 +64,11 @@ urlpatterns = [
     path('invoices/<uuid:id>/review/', InvoiceReviewView.as_view(), name='invoice-review'),
     path('invoices/line-items/<uuid:id>/', LineItemUpdateView.as_view(), name='line-item-update'),
     path('invoices/<uuid:id>/confirm/', InvoiceConfirmView.as_view(), name='invoice-confirm'),
+
+    # ── External Partner API Gateway (Spec #15) ──────────────────────────────
+    path('external/inventory/sync/', ExternalInventorySyncView.as_view(), name='external-inventory-sync'),
+    path('external/shipments/update/', ExternalShipmentUpdateView.as_view(), name='external-shipment-update'),
+    path('admin/api-keys/', AdminApiKeyListCreateView.as_view(), name='admin-api-key-list-create'),
+    path('admin/api-keys/<uuid:pk>/revoke/', AdminApiKeyRevokeView.as_view(), name='admin-api-key-revoke'),
 ]
 

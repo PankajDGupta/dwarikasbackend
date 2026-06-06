@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #14: WhatsApp Commerce Engine — **Complete**
+- Spec #15: External Partner API Gateway — **Complete**
  
 ## Current Goal
  
-- Implement External Partner API Gateway (Spec #15)
+- Implement Security Hardening & Rate Limiting (Spec #16)
 
 
 ## Completed
@@ -174,6 +174,17 @@ Update this file after every meaningful implementation change.
   - Built comprehensive unit and integration test suite (16 tests) verifying endpoint verifications, intent routing, and mock messaging.
   - **Completed:** 2026-06-06T22:45:00+05:30
 
+- ✅ Spec #15 - External Partner API Gateway (`api/`, `inventory/`)
+  - Created `public.external_api_keys` database table with manager-only RLS policy and `check_user_is_manager` security definer helper function.
+  - Added `carrier_status` and `tracking_reference` tracking columns to `public.orders` and Django `Order` model.
+  - Implemented `ExternalApiKeyAuthentication` checking `X-Dwarikas-Api-Key` and authenticating ephemeral `ExternalPartner` users.
+  - Implemented `HasValidRequestSignature` executing replay protection checks and verifying HMAC-SHA256 request payload signatures using `EXTERNAL_SIGNING_SECRET`.
+  - Created Django management command `create_api_key` to provision cryptographically secure API keys and output raw tokens once.
+  - Developed administrative endpoints `AdminApiKeyListCreateView` and `AdminApiKeyRevokeView` for API key management.
+  - Created `ExternalInventorySyncView` for batch stock delta updates and `ExternalShipmentUpdateView` to ingest fulfillment updates.
+  - Written comprehensive test suite with 14 unit and integration tests covering security validations, delta calculations, and lifecycle endpoints.
+  - **Completed:** 2026-06-06T23:30:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -192,7 +203,7 @@ Update this file after every meaningful implementation change.
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | ✅ Complete |
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | ✅ Complete |
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | ✅ Complete |
-| 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
+| 15 | External Partner API Gateway | `api/`, `inventory/` | ✅ Complete |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |

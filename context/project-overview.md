@@ -36,6 +36,8 @@ Supabase Local JWT Validation: Custom Django security middleware validates asymm
 
 Granular Role-Based Access Control (RBAC): Restricts staff dashboard features (barcode creation, price configurations, and raw file access) to authorized administrative accounts while providing public read-only access to catalogs.  
 
+External Partner Integration Gateway: Secured endpoints for corporate ERP inventory sync and logistics provider updates. Authenticates requests using one-way SHA-256 hashed API keys and validates integrity using HMAC-SHA256 signatures over the payload. Includes admin endpoints allowing managers to securely list, generate, and revoke partner API keys via the Admin UI, displaying the raw key only once upon generation.
+
 ### High-Concurrency Transaction Guards
 Atomic PostgreSQL Updates: Applies transactional logic (select_for_update database locks) to ensure multiple clients do not purchase the last unit of a given SKU at the same millisecond.  
 
@@ -93,6 +95,8 @@ One-Click Promotion Activation: Managers review the suggestions queue (ranked by
 - Promotions, coupon codes, and gaming engine coupon reward integration.
 
 - Nightly analytics job for smart discount suggestion scoring using inventory, sales velocity, abandonment, and margin signals — with one-click manager activation.
+
+- External Partner API Gateway supporting inventory sync and shipment status updates, along with Admin REST endpoints for API key lifecycle management (generation, listing, and revocation).
 
 ### Out of Scope
 

@@ -104,6 +104,7 @@ DATABASES = {
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'api.authentication.SupabaseJWTAuthentication',
+        'api.external_auth.ExternalApiKeyAuthentication',   # Add after JWT auth
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
