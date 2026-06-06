@@ -1,8 +1,8 @@
-# [Project Name]
+# Dwarikas Backend
 
 ## Overview
 
-The Dwarikas Central API Engine is a unified, scalable Django REST Framework (DRF) backend deployed on Google Cloud Run, serving as the central orchestration and transaction-integrity hub for the Dwarikas omnichannel retail ecosystem. It is built specifically for retail administrators, floor staff, and digital customers shopping via web or mobile applications. The application solves the critical problems of inventory desynchronization across digital and physical storefronts ("ghost inventory") and heavy operational data entry overhead by unifying database operations into a real-time Supabase PostgreSQL engine, automating inventory intake through AI-powered document processing (OCR), and protecting concurrent transactions with robust atomic row-level locks.
+The Dwarikas Backend is a unified, scalable Django REST Framework (DRF) backend deployed on Google Cloud Run, serving as the central orchestration and transaction-integrity hub for the Dwarikas omnichannel retail ecosystem. It is built specifically for retail administrators, floor staff, and digital customers shopping via web or mobile applications. The application solves the critical problems of inventory desynchronization across digital and physical storefronts ("ghost inventory") and heavy operational data entry overhead by unifying database operations into a real-time Supabase PostgreSQL engine, automating inventory intake through AI-powered document processing (OCR), and protecting concurrent transactions with robust atomic row-level locks.
 
 ## Goals
 
