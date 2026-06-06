@@ -14,6 +14,8 @@ from inventory.order_views import (
     OrderListView,
     OrderDetailView,
 )
+from inventory.barcode_views import Code128BarcodeView, EAN13BarcodeView
+from inventory.packaging_views import PackagingJobListCreateView, PackagingJobDetailView
 
 urlpatterns = [
     # ── Product Catalog (Spec #06) ─────────────────────────────────────────
@@ -36,5 +38,13 @@ urlpatterns = [
     path('orders/confirm/', OrderConfirmView.as_view(), name='order-confirm'),
     path('orders/', OrderListView.as_view(), name='order-list'),
     path('orders/<uuid:id>/', OrderDetailView.as_view(), name='order-detail'),
+
+    # ── Barcode Generation (Spec #09) ──────────────────────────────────────
+    path('barcodes/<str:sku>/code128/', Code128BarcodeView.as_view(), name='barcode-code128'),
+    path('barcodes/<str:sku>/ean13/', EAN13BarcodeView.as_view(), name='barcode-ean13'),
+
+    # ── Loose Product Repackaging (Spec #09b) ──────────────────────────────
+    path('packaging-jobs/', PackagingJobListCreateView.as_view(), name='packaging-job-list-create'),
+    path('packaging-jobs/<uuid:id>/', PackagingJobDetailView.as_view(), name='packaging-job-detail'),
 ]
 

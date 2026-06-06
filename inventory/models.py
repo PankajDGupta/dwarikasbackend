@@ -87,6 +87,7 @@ class Product(models.Model):
     name = models.TextField()
     hsn_code = models.TextField()
     gst_slab = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
+    is_loose_commodity = models.BooleanField(default=False)
 
     # Product classification — drives which optional fields apply
     product_type = models.TextField(
@@ -147,11 +148,13 @@ class ProductVariant(models.Model):
     ATP (Available-To-Promise) is derived dynamically:
         ATP = stock_quantity - SUM(active reservation quantities)
     """
-    UOM_CHOICES = [
+    UNIT_CHOICES = [
+        ('unit', 'Unit'),
         ('kg', 'Kilograms'),
         ('g', 'Grams'),
-        ('L', 'Litres'),
+        ('litre', 'Litres'),
         ('ml', 'Millilitres'),
+        ('L', 'Litres (Legacy)'),
         ('pcs', 'Pieces'),
         ('pack', 'Pack'),
     ]
@@ -172,7 +175,8 @@ class ProductVariant(models.Model):
     mrp = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     weight_volume = models.TextField(null=True, blank=True)
     net_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    unit_of_measure = models.TextField(choices=UOM_CHOICES, null=True, blank=True)
+    net_weight_value = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    unit_of_measure = models.TextField(choices=UNIT_CHOICES, default='unit')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -258,3 +262,60 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order({self.id}, {self.payment_method}, status={self.payment_status})"
+
+
+class PackagingJob(models.Model):
+    """
+    Audit log of a packaging machine run.
+    One job = one session at the machine that produced packets from bulk stock.
+    """
+    id                 = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_description = models.TextField()                          # Free text e.g. "50kg Basmati Rice - INV-001"
+    source_variant     = models.ForeignKey(                          # Optional link to bulk ProductVariant
+        'ProductVariant',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='packaging_jobs',
+        db_column='source_variant_id',
+    )
+    bulk_quantity_used = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    bulk_unit          = models.TextField(null=True, blank=True)     # e.g. 'kg'
+    notes              = models.TextField(null=True, blank=True)
+    created_by         = models.UUIDField()                          # Supabase auth.users(id)
+    created_at         = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed  = False
+        db_table = 'packaging_jobs'
+
+    def __str__(self):
+        return f"PackagingJob {self.id} — {self.source_description}"
+
+
+class PackagingJobOutput(models.Model):
+    """
+    One row per packet size created in a PackagingJob.
+    """
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job              = models.ForeignKey(
+        PackagingJob,
+        on_delete=models.CASCADE,
+        related_name='outputs',
+        db_column='job_id',
+    )
+    variant          = models.ForeignKey(
+        'ProductVariant',
+        on_delete=models.RESTRICT,
+        related_name='packaging_outputs',
+        db_column='variant_id',
+    )
+    packets_produced = models.IntegerField()
+    weight_per_packet = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    unit_of_measure  = models.TextField(null=True, blank=True)
+    barcode_value    = models.TextField(null=True, blank=True)
+    is_new_variant   = models.BooleanField(default=False)
+
+    class Meta:
+        managed  = False
+        db_table = 'packaging_job_outputs'

@@ -14,11 +14,23 @@ class ManagedModelTestRunner(DiscoverRunner):
     """
 
     def setup_databases(self, **kwargs):
-        # 1. Modify initial migration operations in-memory to set managed=True
-        for op in initial_migration.Migration.operations:
-            if hasattr(op, 'options') and 'managed' in op.options:
-                op.options['managed'] = True
+        # 1. Modify all migration operations in-memory to set managed=True
+        import os
+        import importlib
+        from django.conf import settings
 
+        migrations_dir = os.path.join(settings.BASE_DIR, 'inventory', 'migrations')
+        if os.path.exists(migrations_dir):
+            for filename in os.listdir(migrations_dir):
+                if filename.endswith('.py') and not filename.startswith('__'):
+                    migration_name = filename[:-3]
+                    try:
+                        mig = importlib.import_module(f'inventory.migrations.{migration_name}')
+                        for op in mig.Migration.operations:
+                            if hasattr(op, 'options') and 'managed' in op.options:
+                                op.options['managed'] = True
+                    except Exception:
+                        pass
 
         # 2. Also set managed=True on actual Django model classes in-memory
         from django.apps import apps

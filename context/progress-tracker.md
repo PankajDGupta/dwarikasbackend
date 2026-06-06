@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #08: Order Confirmation & Atomic Stock Decrement — **Complete**
+- Spec #09b: Loose Product Repackaging & Packet Barcode Creation — **Complete**
 
 ## Current Goal
 
-- Implement Barcode Generation Endpoints (Spec #09)
+- Implement Invoice Ingestion and Google Cloud Tasks Dispatch (Spec #10)
 
 
 ## Completed
@@ -113,9 +113,24 @@ Update this file after every meaningful implementation change.
   - All 21 tests pass against local Supabase PostgreSQL (port 54322)
   - **Completed:** 2026-06-01T23:58:00+05:30
 
+- ✅ Spec #09 - Barcode Generation Endpoints (`inventory/barcode_service.py`, `inventory/barcode_views.py`, `inventory/urls.py`)
+  - Added dependencies `python-barcode[images]` and `Pillow` to `pyproject.toml`
+  - Created standalone service module `inventory/barcode_service.py` to generate Code 128 and EAN-13 barcodes
+  - Created DRF `Code128BarcodeView` and `EAN13BarcodeView` under `inventory/barcode_views.py`
+  - Enforced `IsStaffOrManager` permission checks on endpoints
+  - Added input validation for EAN-13 numeric strings and query parameters handling for Code 128
+  - Added routes to `inventory/urls.py`
+  - Created extensive unit/integration tests verifying permissions, output image validation, invalid inputs, and independent function execution
+  - **Completed:** 2026-06-06T17:42:00+05:30
 
-
-- None.
+- ✅ Spec #09b - Loose Product Repackaging & Packet Barcode Creation (`inventory/packaging_serializers.py`, `inventory/packaging_views.py`, `inventory/urls.py`)
+  - Added new unmanaged Django models `PackagingJob` and `PackagingJobOutput`.
+  - Added fields `is_loose_commodity` to `Product` and `net_weight_value` to `ProductVariant`.
+  - Configured compatible unit choices merging legacy catalog items (`pcs`, `pack`) with bulk repackaging metrics.
+  - Implemented `POST /api/v1/packaging-jobs/` endpoint with automatic variant generation, stock incrementing, barcode generation, and database transaction rollback integrity.
+  - Implemented `GET /api/v1/packaging-jobs/` (paginated list) and `GET /api/v1/packaging-jobs/<uuid:id>/` (job detail) endpoints.
+  - Added comprehensive test suite verifying RBAC validations, automatic barcode creation, list pagination, detail views, and reservation integration.
+  - **Completed:** 2026-06-06T23:55:00+05:30
 
 ## Next Up
 
@@ -128,8 +143,8 @@ Update this file after every meaningful implementation change.
 | 06 | Product Catalog API | `inventory/` | ✅ Complete |
 | 07 | Checkout Reservation & Pessimistic Locking | `inventory/` | ✅ Complete |
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | ✅ Complete |
-| 09 | Barcode Generation Endpoints | `inventory/` | 🔲 Not started |
-| 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | 🔲 Not started — spec written 2026-06-03 — **depends on Spec 09** |
+| 09 | Barcode Generation Endpoints | `inventory/` | ✅ Complete |
+| 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | ✅ Complete |
 | 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | 🔲 Not started |
 | 11 | Document AI OCR Worker | `tasks/` | 🔲 Not started |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | 🔲 Not started |
@@ -140,7 +155,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #09 — Barcode Generation Endpoints, then Spec #09b — Loose Product Repackaging.
+**Next immediate step:** Execute Spec #10 — Invoice Upload & Cloud Tasks Dispatch.
 
 
 ## Open Questions
