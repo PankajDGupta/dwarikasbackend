@@ -56,6 +56,20 @@ ONDC Seller Node Core: Implements the required Beckn Protocol schemas to nativel
 
 WhatsApp Commerce Engine: Integrates with the WhatsApp Business API to allow conversational catalog search and real-time inventory queries directly over message threads.
 
+Gaming Engine Integration: Connects with an external gaming engine via a secure HMAC-verified webhook. When a customer wins a game, the backend automatically issues a single-use reward coupon and delivers it via WhatsApp. Managers configure reward tiers that map win levels to coupon values.
+
+### Promotions & Loyalty Engine
+Time-Bound Promotional Discounts: Managers create promotions (percentage or flat-amount discounts) scoped to specific products or variants. Active promotions surface automatically on the customer storefront and are enforced server-side at checkout — the effective discounted price is locked into the reservation to prevent client-side manipulation.
+
+Coupon Code System: Managers issue alphanumeric coupon codes with configurable usage caps, per-user limits, time windows, and user-specific targeting. Customers enter codes at checkout; the backend validates and applies the discount atomically using row-level locks to prevent race conditions.
+
+WhatsApp Promotion Broadcast: Managers can push a live promotion as a rich CTA WhatsApp message to a list of opted-in customer phone numbers with one API call. Each send attempt is audited in a broadcast log.
+
+### Smart Discount Suggestions Engine
+Data-Driven Clearance Recommendations: A nightly background analytics job (dispatched via Google Cloud Scheduler → Cloud Tasks) scans all inventory using data already captured in the system — stock levels, order velocity, cart abandonment rates, and invoice cost-of-goods — to compute a composite discount score (0–100) for each variant. Variants scoring above the threshold are surfaced as prioritised suggestions on the manager's dashboard.
+
+One-Click Promotion Activation: Managers review the suggestions queue (ranked by urgency: critical / high / medium) and can approve a suggestion with a single API call, which atomically creates a live Promotion record pre-configured with the AI-suggested discount percentage and duration. No manual form filling required.
+
 ## Scope
 
 ### In Scope
@@ -68,13 +82,17 @@ WhatsApp Commerce Engine: Integrates with the WhatsApp Business API to allow con
 
 - PostgreSQL transaction isolation, pessimistic lock patterns (select_for_update), and temporary checkout reservation states.  
 
-- Google Cloud Tasks asynchronous integration for document processing and exception queue management.
+- Google Cloud Tasks asynchronous integration for document processing, exception queue management, and nightly analytics jobs.
 
 - Integration with Document AI OCR APIs for unstructured invoice parsing.
 
 - Barcode generation endpoints exporting Code 128/EAN-13 standards.
 
 - Compliance hooks for ONDC Seller Node APIs (Beckn Protocol v1.2.5).
+
+- Promotions, coupon codes, and gaming engine coupon reward integration.
+
+- Nightly analytics job for smart discount suggestion scoring using inventory, sales velocity, abandonment, and margin signals — with one-click manager activation.
 
 ### Out of Scope
 

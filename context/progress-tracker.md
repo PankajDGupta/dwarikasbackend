@@ -3,12 +3,12 @@
 Update this file after every meaningful implementation change.
 
 ## Current Phase
-
-- Spec #13: ONDC Seller Node (Beckn Protocol) — **Complete**
-
+ 
+- Spec #14: WhatsApp Commerce Engine — **Complete**
+ 
 ## Current Goal
-
-- Implement WhatsApp Commerce Engine (Spec #14)
+ 
+- Implement External Partner API Gateway (Spec #15)
 
 
 ## Completed
@@ -164,6 +164,15 @@ Update this file after every meaningful implementation change.
   - Implemented core views for discovery (`/search`), selection (`/select`), fulfillment initialization (`/init`), payment confirmation (`/confirm`), status polling (`/status`), and order/reservation cancellation (`/cancel`).
   - Added comprehensive integration test suite covering signature verification, ATP calculations, tax calculations (local CGST/SGST vs interstate IGST), and inventory atomic mutations.
   - **Completed:** 2026-06-06T21:50:00+05:30
+ 
+- ✅ Spec #14 - WhatsApp Commerce Engine (`whatsapp/`)
+  - Created new Django app `whatsapp` and registered it in `INSTALLED_APPS`.
+  - Implements rule-based intent classification for incoming messages mapping to: `catalog`, `stock_check`, `order_status`, `fallback`.
+  - Implements WhatsApp Cloud API client helper wrapper for Meta's messaging gateway.
+  - Implements action handlers querying database real-time stock ATP and formatting lists, text, and CTA button structures.
+  - Implements `WhatsAppWebhookView` for Meta webhook challenge-response GET handshake and X-Hub-Signature-256 POST verification.
+  - Built comprehensive unit and integration test suite (16 tests) verifying endpoint verifications, intent routing, and mock messaging.
+  - **Completed:** 2026-06-06T22:45:00+05:30
 
 ## Next Up
 
@@ -182,13 +191,17 @@ Update this file after every meaningful implementation change.
 | 11 | Document AI OCR Worker | `tasks/` | ✅ Complete |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | ✅ Complete |
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | ✅ Complete |
-| 14 | WhatsApp Commerce Engine | `whatsapp/` | 🔲 Not started |
+| 14 | WhatsApp Commerce Engine | `whatsapp/` | ✅ Complete |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | 🔲 Not started |
 | 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
+| 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
+| 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
+| 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
+| 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
 
-**Next immediate step:** Execute Spec #14 — WhatsApp Commerce Engine.
+**Next immediate step:** Execute Spec #15 — External Partner API Gateway.
 
 
 ## Open Questions
