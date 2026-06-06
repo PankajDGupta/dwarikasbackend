@@ -16,6 +16,7 @@ from inventory.order_views import (
 )
 from inventory.barcode_views import Code128BarcodeView, EAN13BarcodeView
 from inventory.packaging_views import PackagingJobListCreateView, PackagingJobDetailView
+from inventory.invoice_views import InvoiceUploadView, InvoiceListView, InvoiceDetailView
 
 urlpatterns = [
     # ── Product Catalog (Spec #06) ─────────────────────────────────────────
@@ -46,5 +47,10 @@ urlpatterns = [
     # ── Loose Product Repackaging (Spec #09b) ──────────────────────────────
     path('packaging-jobs/', PackagingJobListCreateView.as_view(), name='packaging-job-list-create'),
     path('packaging-jobs/<uuid:id>/', PackagingJobDetailView.as_view(), name='packaging-job-detail'),
+
+    # ── Invoice Ingestion (Spec #10) ────────────────────────────────────────
+    path('invoices/upload/', InvoiceUploadView.as_view(), name='invoice-upload'),
+    path('invoices/', InvoiceListView.as_view(), name='invoice-list'),
+    path('invoices/<uuid:id>/', InvoiceDetailView.as_view(), name='invoice-detail'),
 ]
 

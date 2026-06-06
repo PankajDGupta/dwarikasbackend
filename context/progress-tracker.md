@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- Spec #09b: Loose Product Repackaging & Packet Barcode Creation — **Complete**
+- Spec #10: Invoice Upload & Cloud Tasks Dispatch — **Complete**
 
 ## Current Goal
 
-- Implement Invoice Ingestion and Google Cloud Tasks Dispatch (Spec #10)
+- Implement Document AI OCR Worker (Spec #11) / HITL Invoice Validation & Confirmation (Spec #12)
 
 
 ## Completed
@@ -131,6 +131,14 @@ Update this file after every meaningful implementation change.
   - Implemented `GET /api/v1/packaging-jobs/` (paginated list) and `GET /api/v1/packaging-jobs/<uuid:id>/` (job detail) endpoints.
   - Added comprehensive test suite verifying RBAC validations, automatic barcode creation, list pagination, detail views, and reservation integration.
   - **Completed:** 2026-06-06T23:55:00+05:30
+- ✅ Spec #10 - Invoice Upload & Cloud Tasks Dispatch (`inventory/gcs_service.py`, `inventory/tasks_service.py`, `inventory/invoice_views.py`, `inventory/urls.py`)
+  - Created unmanaged Django models `PurchaseInvoice` and `InvoiceLineItem` and applied database schema.
+  - Enabled local database RLS (Row Level Security) and added permissions validation.
+  - Implemented GCS service helpers with a self-contained local filesystem upload and signed URL fallback.
+  - Implemented Cloud Tasks helper with local thread-based asynchronous HTTP request worker simulation.
+  - Added DRF views for secure upload, list, and detail query fetching of invoices with status updates and JWT guards.
+  - Created a robust unit and integration testing suite validating size limits, format validation, permissions, and fallback mechanisms.
+  - **Completed:** 2026-06-06T18:50:00+05:30
 
 ## Next Up
 
@@ -145,7 +153,7 @@ Update this file after every meaningful implementation change.
 | 08 | Order Confirmation & Atomic Stock Decrement | `inventory/` | ✅ Complete |
 | 09 | Barcode Generation Endpoints | `inventory/` | ✅ Complete |
 | 09b | Loose Product Repackaging & Packet Barcode Creation | `inventory/` | ✅ Complete |
-| 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | 🔲 Not started |
+| 10 | Invoice Upload & Cloud Tasks Dispatch | `inventory/` | ✅ Complete |
 | 11 | Document AI OCR Worker | `tasks/` | 🔲 Not started |
 | 12 | HITL Invoice Validation & Confirmation | `inventory/` | 🔲 Not started |
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | 🔲 Not started |
@@ -155,7 +163,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 
-**Next immediate step:** Execute Spec #10 — Invoice Upload & Cloud Tasks Dispatch.
+**Next immediate step:** Execute Spec #11 — Document AI OCR Worker.
 
 
 ## Open Questions

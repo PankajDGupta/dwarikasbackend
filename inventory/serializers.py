@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from inventory.models import Product, ProductVariant, Reservation, Order
+from inventory.models import Product, ProductVariant, Reservation, Order, PurchaseInvoice, InvoiceLineItem
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -92,4 +92,28 @@ class OrderSerializer(serializers.ModelSerializer):
             'payment_method', 'payment_status', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class InvoiceLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InvoiceLineItem
+        fields = [
+            'id', 'sku', 'description', 'quantity', 'unit_price',
+            'gst_rate', 'confidence_score', 'needs_review',
+        ]
+        read_only_fields = ['id', 'confidence_score']
+
+
+class PurchaseInvoiceSerializer(serializers.ModelSerializer):
+    line_items = InvoiceLineItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PurchaseInvoice
+        fields = [
+            'id', 'invoice_number', 'vendor_name', 'vendor_gstin',
+            'issued_at', 'gcs_object_path', 'status', 'uploaded_by',
+            'created_at', 'line_items',
+        ]
+        read_only_fields = ['id', 'gcs_object_path', 'uploaded_by', 'created_at', 'status']
+
 

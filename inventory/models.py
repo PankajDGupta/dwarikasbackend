@@ -319,3 +319,55 @@ class PackagingJobOutput(models.Model):
     class Meta:
         managed  = False
         db_table = 'packaging_job_outputs'
+
+
+class PurchaseInvoice(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('review', 'Needs Review'),
+        ('confirmed', 'Confirmed'),
+        ('failed', 'Failed'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice_number = models.TextField(unique=True, null=True, blank=True)
+    vendor_name = models.TextField(null=True, blank=True)
+    vendor_gstin = models.TextField(null=True, blank=True)
+    issued_at = models.DateField(null=True, blank=True)
+    gcs_object_path = models.TextField()
+    status = models.TextField(choices=STATUS_CHOICES, default='pending')
+    uploaded_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'purchase_invoices'
+
+    def __str__(self):
+        return f"PurchaseInvoice({self.id}, number={self.invoice_number}, status={self.status})"
+
+
+class InvoiceLineItem(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice = models.ForeignKey(
+        PurchaseInvoice,
+        on_delete=models.CASCADE,
+        related_name='line_items',
+        db_column='invoice_id',
+    )
+    sku = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    quantity = models.IntegerField(null=True, blank=True)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    confidence_score = models.DecimalField(max_digits=4, decimal_places=3, null=True, blank=True)
+    needs_review = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'invoice_line_items'
+
+    def __str__(self):
+        return f"InvoiceLineItem({self.id}, sku={self.sku}, qty={self.quantity})"
+
