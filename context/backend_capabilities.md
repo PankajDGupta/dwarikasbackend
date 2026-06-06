@@ -1064,8 +1064,7 @@ Some endpoints include additional context fields:
 | #13 | ONDC Seller Node (Beckn Protocol) | `ondc/search/`, `ondc/select/`, `ondc/init/`, `ondc/confirm/`, `ondc/status/`, `ondc/cancel/` |
 | #14 | WhatsApp Commerce Engine | `whatsapp/webhook/` |
 | #15 | External Partner API Gateway | `external/inventory/sync/`, `external/shipments/update/`, `admin/api-keys/`, `admin/api-keys/<uuid:pk>/revoke/` |
- 
-| #16 | Security Hardening & Rate Limiting | Infrastructure-level — may introduce rate-limit headers |
+| #16 | Security Hardening & Rate Limiting | `health/`, `auth/logout/` |
 | #17 | Payment Gateway (Razorpay) | Payment processing — will add payment initiation/webhook endpoints |
 | #18 | POS Cash Sales & In-Store Billing | Point-of-sale terminal backend |
 
@@ -1137,4 +1136,8 @@ PATCH   /api/v1/external/shipments/update/                 → Update shipment s
 GET     /api/v1/admin/api-keys/                            → List external partner API keys (Manager only)
 POST    /api/v1/admin/api-keys/                            → Create external partner API key (Manager only)
 POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/            → Revoke external partner API key (Manager only)
+
+# ── Security Hardening & Rate Limiting (Completed) ────────────────────────
+GET     /api/v1/health/                                    → Service liveness health check
+POST    /api/v1/auth/logout/                               → Revoke session token (logout)
 ```

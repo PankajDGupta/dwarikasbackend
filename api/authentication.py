@@ -72,24 +72,37 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
                 # Supabase sets aud="authenticated" for every logged-in user.
                 audience="authenticated",
             )
-        except jwt.ExpiredSignatureError:
-            raise exceptions.AuthenticationFailed(
-                "The provided authentication token has expired."
+        except Exception as e:
+            from django.contrib.auth.signals import user_login_failed
+            user_login_failed.send(
+                sender=self.__class__,
+                credentials={'username': 'token_invalid'},
+                request=request
             )
-        except jwt.InvalidAudienceError:
-            raise exceptions.AuthenticationFailed(
-                "Token audience claim does not match the expected value."
-            )
-        except jwt.InvalidTokenError:
-            raise exceptions.AuthenticationFailed(
-                "Cryptographic verification failed against token signature."
-            )
+            if isinstance(e, jwt.ExpiredSignatureError):
+                raise exceptions.AuthenticationFailed(
+                    "The provided authentication token has expired."
+                )
+            elif isinstance(e, jwt.InvalidAudienceError):
+                raise exceptions.AuthenticationFailed(
+                    "Token audience claim does not match the expected value."
+                )
+            else:
+                raise exceptions.AuthenticationFailed(
+                    "Cryptographic verification failed against token signature."
+                )
 
         # ── 5. Claim extraction ───────────────────────────────────────────────
         supabase_uid = payload.get("sub")
         email = payload.get("email", "")
 
         if not supabase_uid:
+            from django.contrib.auth.signals import user_login_failed
+            user_login_failed.send(
+                sender=self.__class__,
+                credentials={'username': 'missing_sub'},
+                request=request
+            )
             raise exceptions.AuthenticationFailed(
                 "Token payload lacks a valid unique user subject identifier."
             )

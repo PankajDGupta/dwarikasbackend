@@ -30,6 +30,12 @@ class ExternalApiKeyAuthentication(authentication.BaseAuthentication):
         try:
             api_key = ExternalApiKey.objects.get(key_hash=key_hash, is_active=True)
         except ExternalApiKey.DoesNotExist:
+            from django.contrib.auth.signals import user_login_failed
+            user_login_failed.send(
+                sender=self.__class__,
+                credentials={'username': 'api_key_invalid'},
+                request=request
+            )
             raise exceptions.AuthenticationFailed('Invalid or revoked API key.')
 
         # Create a lightweight pseudo-user for DRF compatibility
@@ -37,6 +43,8 @@ class ExternalApiKeyAuthentication(authentication.BaseAuthentication):
             'is_authenticated': True,
             'username': api_key.partner_name,
             'role': 'external',
+            'pk': api_key.id,
+            'id': api_key.id,
         })()
 
         return (user, api_key)
@@ -89,6 +97,12 @@ class HasValidRequestSignature(authentication.BaseAuthentication):
         expected = hmac.new(secret.encode(), payload_str.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(signature, expected):
+            from django.contrib.auth.signals import user_login_failed
+            user_login_failed.send(
+                sender=self.__class__,
+                credentials={'username': 'signature_invalid'},
+                request=request
+            )
             raise exceptions.AuthenticationFailed('Request signature verification failed.')
 
         return None   # Signature valid; authentication handled by ExternalApiKeyAuthentication

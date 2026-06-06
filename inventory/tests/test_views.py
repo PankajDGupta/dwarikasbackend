@@ -293,6 +293,7 @@ class ProductCatalogAPITests(TestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["sku"], self.variant2.sku)
 
+    @override_settings(AXES_ENABLED=False)
     def test_n_plus_one_queries_prevention(self):
         """Ensure listing products uses prefetch_related to avoid N+1 queries."""
         url = reverse("product-list")

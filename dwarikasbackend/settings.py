@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_filters',                  # For django-filter queries
     'corsheaders',
+    'axes',                            # django-axes brute force protection
     'api.apps.ApiConfig',
     'inventory.apps.InventoryConfig',   # Spec #04 — unmanaged ORM mirrors of Supabase schema
     'tasks.apps.TasksConfig',
@@ -63,7 +64,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'api.middleware.AxesLockoutMiddleware',          # Block locked out IPs early
+    'api.middleware.JTIBlocklistMiddleware',        # Check revocation first
+    'api.middleware.UserAgentValidationMiddleware', # Then device binding
     'django.middleware.common.CommonMiddleware',
+    'axes.middleware.AxesMiddleware',               # After CommonMiddleware
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -116,6 +121,14 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/minute',
+        'user': '300/minute',
+    },
 }
 
 
@@ -172,4 +185,40 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom test runner to enable database creation for unmanaged models
 TEST_RUNNER = 'inventory.tests.runner.ManagedModelTestRunner'
+
+# ── Cache Backend (Redis with LocMem fallback for tests) ────────────────────
+import sys
+IS_TESTING = 'test' in sys.argv or any('test' in arg for arg in sys.argv)
+
+if IS_TESTING:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'dwarikas-testing-cache',
+        }
+    }
+else:
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+        }
+    }
+
+# ── django-axes brute force protection ─────────────────────────────────────
+AXES_ENABLED = True
+AXES_FAILURE_LIMIT = 5            # Lock after 5 consecutive failures
+AXES_COOLOFF_TIME = 2             # Hours (2-hour sliding ban)
+AXES_LOCKOUT_PARAMETERS = [['ip_address']]   # Lock by IP
+AXES_CACHE = 'default'            # Use cache (Redis or LocMem) for axes state
+AXES_LOCKOUT_CALLABLE = 'api.middleware.custom_lockout_view'
+
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 

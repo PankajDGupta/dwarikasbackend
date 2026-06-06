@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #15: External Partner API Gateway — **Complete**
+- Spec #16: Security Hardening & Rate Limiting — **Complete**
  
 ## Current Goal
  
-- Implement Security Hardening & Rate Limiting (Spec #16)
+- Implement Payment Gateway Integration (Razorpay) (Spec #17)
 
 
 ## Completed
@@ -185,6 +185,18 @@ Update this file after every meaningful implementation change.
   - Written comprehensive test suite with 14 unit and integration tests covering security validations, delta calculations, and lifecycle endpoints.
   - **Completed:** 2026-06-06T23:30:00+05:30
 
+- ✅ Spec #16 - Security Hardening & Rate Limiting (`api/middleware.py`, `api/logout_view.py`, `api/health_view.py`, `api/urls.py`, `api/tests/test_security.py`)
+  - Configured Redis-backed cache with LocMemCache fallback for test runs.
+  - Enabled global DRF throttling: anonymous requests at 60/min, authenticated requests at 300/min.
+  - Integrated `django-axes` for brute-force protection (lockout after 5 failed attempts, custom 403 JSON lockout payload).
+  - Added early `AxesLockoutMiddleware` to return custom JSON errors for blocked IPs and bypass health probes.
+  - Implemented `JTIBlocklistMiddleware` and `revoke_jti` for real-time token/session revocation.
+  - Implemented `UserAgentValidationMiddleware` to enforce device binding and prevent JWT replay attacks.
+  - Added `GET /api/v1/health/` liveness check for database and cache connections.
+  - Added `POST /api/v1/auth/logout/` token revocation endpoint.
+  - Written 9 comprehensive unit and integration tests verifying all security checks.
+  - **Completed:** 2026-06-06T23:58:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -204,7 +216,7 @@ Update this file after every meaningful implementation change.
 | 13 | ONDC Seller Node (Beckn Protocol) | `ondc/` | ✅ Complete |
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | ✅ Complete |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | ✅ Complete |
-| 16 | Security Hardening & Rate Limiting | `api/` | 🔲 Not started |
+| 16 | Security Hardening & Rate Limiting | `api/` | ✅ Complete |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 | 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
@@ -212,7 +224,7 @@ Update this file after every meaningful implementation change.
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
 
-**Next immediate step:** Execute Spec #15 — External Partner API Gateway.
+**Next immediate step:** Execute Spec #17 — Payment Gateway Integration (Razorpay).
 
 
 ## Open Questions

@@ -21,5 +21,8 @@ dependencies = [
     "django-filter>=24.0",
     "python-barcode[images]>=0.15.1",
     "Pillow>=10.0.0",
+    "django-axes>=6.4.0",
+    "django-redis>=5.4.0",
+    "redis>=5.0.0",
 ]
 
