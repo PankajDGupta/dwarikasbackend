@@ -715,6 +715,41 @@ Store administrators can list any product from Dwarika's catalog directly onto A
 - `amazon_credentials` — Stores LWA refresh tokens and marketplace configuration per seller.
 - `amazon_listings` — Maps each Dwarika `product_id` to its Amazon `asin`, `sync_status` (`PENDING` / `SUBMITTED` / `ACTIVE` / `INVALID` / `SUPPRESSED` / `ERROR`), and `validation_issues` JSONB.
 
+### Blinkit & JioMart One-Click Quick-Commerce Listing (Spec #24)
+
+Store administrators can list any catalog product on both Blinkit and JioMart hyperlocal quick-commerce channels with a single click. The middleware acts as a **stateful abstraction layer** that normalizes product data, runs pre-flight compliance checks, and routes payloads through two separate ingestion pipelines.
+
+**JioMart Integration (Fynd Konnect v3 REST API):**
+- Asynchronous batch catalog ingestion via `POST /v3/catalog/product` (up to 100 products/request).
+- Non-blocking `trace_id` polling via Cloud Tasks until `COMPLETED` state; field-level errors stored in `validation_issues` JSONB.
+- OAuth 2.0 token management (`x-access-token` header injection; programmatic refresh cycles).
+- JSON facility map for warehouse-to-JioMart location binding (`jiomartLocationId` → `UCFacilityCode`).
+- Marketplace-shipped order lifecycle: order + A4 invoice fetch → manifest closure → automated CIR/RTO return sync.
+
+**Blinkit Integration (EDI + Webhook B2B Vendor Model):**
+- Semantic EAN-13/UPC catalog matching: if the product already exists on Blinkit, the seller's SKU is linked directly to the active Blinkit UPC — no new catalog entry required.
+- Template compilation pipeline: if the product is new to Blinkit, the middleware compiles a Blinkit-compliant CSV/Excel template and routes it to the Category Manager.
+- Keyless authentication: only the `Vendor ID` / `Receiver Code` is required; security relies on IP whitelisting and Blinkit-side webhook signature validation.
+- Pincode-based routing map for B2B PO assignment (e.g., `"560067"` → `"BLR_03"`).
+- MRP parity enforcement: fulfillment is automatically blocked if the physical label MRP ≠ the PO MRP.
+- ASN (Advanced Shipping Note) generation and transmission to Blinkit dark store after dispatch.
+
+**Compliance Safeguards:**
+- Pre-flight validation gate: EAN-13 check-digit validation, FSSAI license check (14-digit, food/beverage), image resolution (≥ 1000×1000 px, white background), MRP ≤ selling price, JioMart MOQ ≥ 500 units, JioMart shelf life ≥ 60% remaining.
+
+**Operational Metrics (OTIF, Fill Rate, IDM) — Manager API:**
+- OTIF Rate = (on-time ∩ in-full POs / total POs) × 100. Target ≥ 95%.
+- Fill Rate = (Σ delivered qty / Σ ordered qty) × 100. Target ≥ 98%.
+- Inventory Discrepancy Margin = (Σ |channel_stock − physical_stock| / Σ physical_stock) × 100. Target ≤ 2%.
+
+**New Database Tables:**
+- `qc_platform_listings` — Maps each `product_id`/`variant_id` to platform listing state (`sync_status`, `trace_id`, `submission_guid`, `validation_issues` JSONB) for both Blinkit and JioMart.
+- `qc_platform_credentials` — Stores Fynd access tokens (JioMart) and Blinkit Vendor ID / webhook secrets.
+- `qc_warehouse_mappings` — Hyperlocal routing table: JioMart facility maps and Blinkit pincode-to-facility maps.
+- `qc_purchase_orders` + `qc_po_line_items` — Blinkit B2B PO ingestion records with ASN tracking and MRP/quantity validation state.
+
+
+
 ## 7. Implementation Roadmap & Strategic Operations
 The strategic system roadmap is strictly prioritized over a 38-week milestone timeline:
 

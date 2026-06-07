@@ -80,6 +80,19 @@ Real-Time Validation: The SP-API returns structured error codes immediately when
 
 Event-Driven Status Tracking: Amazon fires `LISTINGS_ITEM_STATUS_CHANGE` notifications via SNS → SQS. The backend consumes these events to update listing state from `SUBMITTED` → `ACTIVE` or `SUPPRESSED`/`ERROR` in the `amazon_listings` table.
 
+### Quick-Commerce Channel Integration (Blinkit & JioMart)
+
+Unified One-Click Listing: Store administrators can list any catalog product on both **Blinkit** and **JioMart** hyperlocal quick-commerce platforms with a single click from the Admin UI. The middleware normalizes master product data into platform-specific schemas, runs pre-flight compliance validation, and routes payloads through two distinct ingestion pipelines.
+
+JioMart Pipeline: Integrates with Reliance's Fynd 3P Aggregator Gateway (Fynd Konnect v3 REST API) for asynchronous batch catalog creation (up to 100 products/request), non-blocking `trace_id` polling, and field-level error surfacing.
+
+Blinkit Pipeline: Implements a semantic EAN/UPC catalog matching workflow for immediate SKU linking when a product already exists on Blinkit, and a template compilation pipeline (CSV/Excel) routed to Blinkit Category Managers for new products.
+
+Fulfillment Lifecycle Management: Manages downstream B2B Purchase Order (PO) processing for Blinkit (webhook receiver, MRP parity validation, Advanced Shipping Note generation) and JioMart marketplace-shipped order lifecycle (order fetch, manifest closure, return sync).
+
+Operational Metrics: Tracks On-Time In-Full (OTIF) rate, Fill Rate (FR), and Inventory Discrepancy Margin (IDM) via automated data pipelines exposed through a Manager-only metrics API endpoint.
+
+
 ## Scope
 
 ### In Scope
@@ -107,6 +120,8 @@ Event-Driven Status Tracking: Amazon fires `LISTINGS_ITEM_STATUS_CHANGE` notific
 - External Partner API Gateway supporting inventory sync and shipment status updates, along with Admin REST endpoints for API key lifecycle management (generation, listing, and revocation).
 
 - Amazon Marketplace integration via Amazon SP-API (Listings Items v2021-08-01): one-click product listing from the Admin UI to Amazon.in, synchronous validation feedback, LWA OAuth 2.0 token management, and asynchronous listing status tracking via Amazon SNS/SQS webhooks.
+
+- Quick-Commerce Channel Integration (`quickcommerce/` Django app): unified one-click product listing on Blinkit and JioMart; JioMart async batch ingestion via Fynd Konnect API with `trace_id` polling; Blinkit semantic EAN/UPC catalog matching and CSV template compilation pipeline; Blinkit B2B PO webhook receiver with MRP parity validation and ASN generation; JioMart order lifecycle management and return sync; hyperlocal warehouse/pincode routing maps; OTIF, Fill Rate, and IDM operational metrics.
 
 ### Out of Scope
 
