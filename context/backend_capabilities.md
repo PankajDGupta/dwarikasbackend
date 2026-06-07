@@ -1004,6 +1004,90 @@ Uses HMAC-SHA256 of the request payload using `WA_APP_SECRET` to verify authenti
  
 ---
  
+#### 5.11 Amazon SP-API One-Click Product Listing (Spec #23)
+ 
+Endpoints enabling store administrators to list catalog products on Amazon Marketplaces with a single click. Uses the synchronous Listings Items API (v2021-08-01) for real-time validation feedback, with downstream asynchronous status tracking via Amazon SNS/SQS webhooks.
+ 
+##### `POST /api/v1/amazon/listings/sync/` — Trigger Amazon Listing Submission
+ 
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+ 
+**Request Body:**
+```json
+{
+  "product_id": "b1ca2914-75dd-11ea-bc55-0242ac130003",
+  "marketplace_id": "A21TJRUUN4KGV"
+}
+```
+ 
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "sku": "DWRK-BASMATI-5K",
+  "status": "SUBMITTED",
+  "submission_id": "7df4e528-9844-46ab-8991-6cf1b54c86e2",
+  "message": "Listing submission successfully accepted by Amazon. Final state changes will resolve asynchronously."
+}
+```
+ 
+**Error Responses:**
+ 
+| Status | Condition |
+|---|---|
+| `400` | Missing `product_id` or `marketplace_id`; product has no EAN/UPC barcode |
+| `404` | Product UUID not found in catalog |
+| `422` | Amazon SP-API returned `INVALID` status — issues returned in body |
+| `429` | SP-API rate limit exceeded; retry after backoff |
+| `502` | Amazon SP-API unreachable or returned 5xx |
+ 
+> **Frontend note:** After receiving `202`, poll the status endpoint to track progression from `SUBMITTED` → `ACTIVE` (or `SUPPRESSED`/`INVALID`). On `422`, display the returned `issues` array showing which product attributes need correction.
+ 
+---
+ 
+##### `GET /api/v1/amazon/listings/{product_id}/status/` — Listing Status Check
+ 
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+ 
+**Response (200 OK):**
+```json
+{
+  "product_id": "b1ca2914-75dd-11ea-bc55-0242ac130003",
+  "sku": "DWRK-BASMATI-5K",
+  "asin": "B01NXYZ123",
+  "sync_status": "ACTIVE",
+  "last_synced_at": "2026-06-07T06:45:00Z",
+  "issues": []
+}
+```
+ 
+**sync_status enum values:**
+ 
+| Value | Meaning |
+|---|---|
+| `PENDING` | Not yet submitted to Amazon |
+| `SUBMITTED` | Submission accepted; awaiting catalog processing |
+| `ACTIVE` | Live and buyable on Amazon marketplace |
+| `INVALID` | Rejected due to structural validation errors |
+| `SUPPRESSED` | Active but hidden from search (policy issue) |
+| `ERROR` | Unexpected error; check `issues` array |
+ 
+---
+ 
+##### `POST /api/v1/amazon/webhooks/sqs-receiver/` — SQS Status Event Receiver
+ 
+| Property | Value |
+|---|---|
+| **Auth** | Internal (Amazon SNS signature verified) |
+ 
+Receives `LISTINGS_ITEM_STATUS_CHANGE` and `LISTINGS_ITEM_ISSUES_CHANGE` events from Amazon SNS via SQS. Parses the notification, maps statuses (`BUYABLE` → `ACTIVE`, `SUPPRESSED` → `SUPPRESSED`), and updates the `amazon_listings` table. Populates the `asin` column when provided. Returns `200 OK` immediately to prevent SNS retry loops.
+ 
+---
+ 
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -1067,9 +1151,10 @@ Some endpoints include additional context fields:
 | #16 | Security Hardening & Rate Limiting | `health/`, `auth/logout/` |
 | #17 | Payment Gateway (Razorpay) | Payment processing — will add payment initiation/webhook endpoints |
 | #18 | POS Cash Sales & In-Store Billing | Point-of-sale terminal backend |
-
+| #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
+ 
 ---
-
+ 
 ### 8. Quick Reference — Full URL Map
 
 ```
@@ -1137,7 +1222,12 @@ GET     /api/v1/admin/api-keys/                            → List external par
 POST    /api/v1/admin/api-keys/                            → Create external partner API key (Manager only)
 POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/            → Revoke external partner API key (Manager only)
 
-# ── Security Hardening & Rate Limiting (Completed) ────────────────────────
+# ── Security Hardening & Rate Limiting (Completed) ──────────────────────────
 GET     /api/v1/health/                                    → Service liveness health check
 POST    /api/v1/auth/logout/                               → Revoke session token (logout)
+
+# ── Amazon SP-API Marketplace Listing (Spec #23 — planned) ──────────────────
+POST    /api/v1/amazon/listings/sync/                      → Trigger one-click Amazon listing submission
+GET     /api/v1/amazon/listings/<uuid:product_id>/status/  → Listing sync status poll
+POST    /api/v1/amazon/webhooks/sqs-receiver/              → Amazon SNS/SQS status event receiver
 ```

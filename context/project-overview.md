@@ -72,6 +72,14 @@ Data-Driven Clearance Recommendations: A nightly background analytics job (dispa
 
 One-Click Promotion Activation: Managers review the suggestions queue (ranked by urgency: critical / high / medium) and can approve a suggestion with a single API call, which atomically creates a live Promotion record pre-configured with the AI-suggested discount percentage and duration. No manual form filling required.
 
+### Amazon Marketplace Integration
+
+One-Click Amazon Listing: Store administrators can list any product from Dwarika's catalog onto Amazon Marketplaces (Amazon.in) with a single click from the Admin UI. The system uses the synchronous Amazon SP-API Listings Items v2021-08-01 to provide real-time validation feedback (<2.5 seconds) and downstream asynchronous status tracking via Amazon SNS/SQS webhooks.
+
+Real-Time Validation: The SP-API returns structured error codes immediately when a product attribute (EAN format, brand, etc.) is invalid. These are stored in `validation_issues` and surfaced in the Admin UI with corrected payload suggestions.
+
+Event-Driven Status Tracking: Amazon fires `LISTINGS_ITEM_STATUS_CHANGE` notifications via SNS → SQS. The backend consumes these events to update listing state from `SUBMITTED` → `ACTIVE` or `SUPPRESSED`/`ERROR` in the `amazon_listings` table.
+
 ## Scope
 
 ### In Scope
@@ -97,6 +105,8 @@ One-Click Promotion Activation: Managers review the suggestions queue (ranked by
 - Nightly analytics job for smart discount suggestion scoring using inventory, sales velocity, abandonment, and margin signals — with one-click manager activation.
 
 - External Partner API Gateway supporting inventory sync and shipment status updates, along with Admin REST endpoints for API key lifecycle management (generation, listing, and revocation).
+
+- Amazon Marketplace integration via Amazon SP-API (Listings Items v2021-08-01): one-click product listing from the Admin UI to Amazon.in, synchronous validation feedback, LWA OAuth 2.0 token management, and asynchronous listing status tracking via Amazon SNS/SQS webhooks.
 
 ### Out of Scope
 

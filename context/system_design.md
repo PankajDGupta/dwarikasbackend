@@ -682,6 +682,39 @@ components:
 
 ```
 
+### Amazon SP-API One-Click Marketplace Listing
+
+Store administrators can list any product from Dwarika's catalog directly onto Amazon Marketplaces (Amazon.in) with a single click. The system uses the synchronous SP-API Listings Items v2021-08-01 endpoint to provide real-time validation feedback and downstream event-driven status tracking.
+
+```
+ Dwarika Admin UI          Django Backend (amazon/)          Amazon SP-API
+        │                           │                             │
+        │  1. POST /listings/sync    │                             │
+        ├────────────────────────►│                             │
+        │                           │  2. POST /auth/o2/token      │
+        │                           ├────────────────────────►│
+        │                           │◄──────── access_token ─────▤
+        │                           │  3. PUT /listings/items      │
+        │                           ├────────────────────────►│
+        │                           │◄─── ACCEPTED / INVALID ────▤
+        │  4. 202 + status           │                             │
+        ◄────────────────────────├                             │
+        │                           │  5. SNS → SQS notification   │
+        │                           ◄─────────────────────────────▤
+        │                           │ (updates amazon_listings DB)│
+        │  6. GET /listings/status   │                             │
+        ├────────────────────────►│                             │
+        ◄───────── ACTIVE / SUPPRESSED ──────▤
+```
+
+**Authentication Flow:** Login with Amazon (LWA) OAuth 2.0. A long-lived Refresh Token is stored in Supabase `amazon_credentials`. The backend exchanges it for short-lived Access Tokens (TTL: 3600s) cached in Redis.
+
+**Rate Limiting:** Amazon SP-API permits 5 requests/sec per seller. A token bucket + exponential backoff strategy (max 4 retries: 1s, 2s, 4s, 8s) handles burst suppression.
+
+**New Database Tables:**
+- `amazon_credentials` — Stores LWA refresh tokens and marketplace configuration per seller.
+- `amazon_listings` — Maps each Dwarika `product_id` to its Amazon `asin`, `sync_status` (`PENDING` / `SUBMITTED` / `ACTIVE` / `INVALID` / `SUPPRESSED` / `ERROR`), and `validation_issues` JSONB.
+
 ## 7. Implementation Roadmap & Strategic Operations
 The strategic system roadmap is strictly prioritized over a 38-week milestone timeline:
 
