@@ -178,11 +178,34 @@ CREATE TABLE public.orders (
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     total_amount NUMERIC(12, 2) NOT NULL,
     gst_amount NUMERIC(12, 2) NOT NULL,
-    payment_method TEXT NOT NULL CHECK (payment_method IN ('UPI', 'card', 'cash')),
-    payment_status TEXT NOT NULL CHECK (payment_status IN ('pending', 'completed', 'failed')),
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('UPI', 'card', 'cash', 'online')),  -- 'online' added in Spec #17 for Razorpay-managed flows
+    payment_status TEXT NOT NULL CHECK (payment_status IN ('pending', 'completed', 'failed', 'refunded')),  -- 'refunded' added in Spec #17
+    carrier_status TEXT CHECK (carrier_status IN ('staged', 'picked_up', 'in_transit', 'delivered')),  -- added in Spec #15
+    tracking_reference TEXT,  -- added in Spec #15
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Payment transaction audit log (Spec #17 — Razorpay)
+-- Separate from orders to allow multiple payment attempts per reservation
+CREATE TABLE public.payment_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reservation_id UUID REFERENCES public.reservations(id) ON DELETE SET NULL,
+    order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL,
+    razorpay_order_id TEXT UNIQUE NOT NULL,       -- rp_order_XXXXXX
+    razorpay_payment_id TEXT,                     -- pay_XXXXXX (filled after payment)
+    razorpay_signature TEXT,                      -- HMAC-SHA256 (filled after verify)
+    amount_paise INTEGER NOT NULL,                -- Amount in paise (1 INR = 100 paise)
+    currency TEXT NOT NULL DEFAULT 'INR',
+    status TEXT NOT NULL DEFAULT 'created'
+              CHECK (status IN ('created', 'attempted', 'paid', 'failed', 'refunded')),
+    failure_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_txn_rp_order ON public.payment_transactions(razorpay_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_txn_user ON public.payment_transactions(user_id);
 ```
 
 ### Row Level Security (RLS) Structural Mitigations

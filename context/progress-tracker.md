@@ -9,6 +9,9 @@ Update this file after every meaningful implementation change.
 ## Current Goal
  
 - Implement Payment Gateway Integration (Razorpay) (Spec #17)
+  - ⚠️ **Blocked on manual pre-requisites** — see `context/feature-spec/spec17-Payment_Gateway_Integration.md` § Pre-Requisites
+  - KYC submission and API key generation must happen before any integration work begins
+  - Razorpay KYC approval can take 2–5 business days
 
 
 ## Completed
@@ -217,7 +220,7 @@ Update this file after every meaningful implementation change.
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | ✅ Complete |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | ✅ Complete |
 | 16 | Security Hardening & Rate Limiting | `api/` | ✅ Complete |
-| 17 | Payment Gateway Integration (Razorpay) | `payments/` | 🔲 Not started — spec written 2026-06-03 |
+| 17 | Payment Gateway Integration (Razorpay) | `payments/` | ⚠️ Pre-requisites pending — spec updated 2026-06-08 with KYC/webhook/secrets checklist |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 | 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
 | 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
@@ -239,6 +242,11 @@ Update this file after every meaningful implementation change.
 - Do we need additional Django middleware for request logging and error handling?
 - `CORS_ALLOW_ALL_ORIGINS = True` — when to restrict to explicit origin list?
 - `DATABASE_URL` local dev fallback: should we provide a `.env.example` template?
+- **[Spec 17]** Fee handling strategy: should Dwarikas absorb the ~2% gateway fee on card/net-banking transactions, or pass it to customers as a `convenience_fee` line item? UPI is 0% (RBI mandate) so this only affects card/net-banking. Options:
+  - Option A: Absorb silently (current spec behaviour — simplest UX)
+  - Option B: Pass full fee to customer with RBI-mandated pre-payment disclosure
+  - Option C: Hybrid — absorb UPI (already free), charge convenience fee for card/net-banking only
+- **[Spec 17]** Webhook URL for Razorpay registration: confirm the final Cloud Run domain once deployed so the webhook can be registered with the correct URL.
 
 ## Architecture Decisions
 
@@ -258,6 +266,19 @@ Update this file after every meaningful implementation change.
 - **api/ app (Spec #02)**: Created a dedicated `api/` Django application as the
   primary REST gateway, separate from the auto-generated `backend/` scaffold app.
   The `backend/` app can be repurposed or removed in a future cleanup step.
+- **Razorpay as payment gateway (Spec #17)**: Evaluated Razorpay vs Cashfree.
+  Razorpay retained for three reasons: (1) it is the most-documented ONDC-approved
+  Payment Aggregator — critical since Spec #13 ONDC `/confirm` routes through the
+  same payment layer; (2) UPI dominates Indian retail (0% fee on both gateways by
+  RBI mandate), neutralizing Cashfree's marginal fee advantage; (3) Spec 17 is
+  already written for Razorpay's exact API shape — migration would be net-zero benefit.
+  Cashfree to be reconsidered if Dwarikas launches a multi-vendor marketplace
+  requiring high-frequency seller payouts.
+- **Payment amounts computed server-side only (Spec #17)**: All order amounts
+  (subtotal, GST, and any future convenience fees) are computed from the database
+  in the backend. The frontend sends only `reservation_id` and `payment_method_type`.
+  This prevents client-side amount tampering and upholds the atomic stock-payment
+  invariant established in Spec #08.
 
 ## Session Notes
 

@@ -174,9 +174,32 @@ All list views support these query-parameter backends:
 | `user_id` | UUID | Supabase user (nullable for guest checkout) |
 | `total_amount` | decimal(12,2) | Subtotal + GST |
 | `gst_amount` | decimal(12,2) | Computed GST amount |
-| `payment_method` | enum | `UPI`, `card`, `cash` |
-| `payment_status` | enum | `pending`, `completed`, `failed` |
+| `payment_method` | enum | `UPI`, `card`, `cash`, `online` *(Razorpay-managed — added Spec #17)* |
+| `payment_status` | enum | `pending`, `completed`, `failed`, `refunded` *(added Spec #17)* |
+| `carrier_status` | enum | `staged`, `picked_up`, `in_transit`, `delivered` *(added Spec #15)* |
+| `tracking_reference` | string | Logistics tracking reference *(added Spec #15)* |
 | `created_at` | datetime | ISO 8601 creation timestamp |
+
+#### 4.9 PaymentTransaction *(Spec #17)*
+
+Audit log for every payment attempt tied to a reservation. Separate from `Order` to allow multiple retries per reservation (e.g., user abandons payment and retries).
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `reservation_id` | UUID (FK) | Reservation this payment is for (nullable after SET NULL) |
+| `order_id` | UUID (FK) | Order created on successful payment (nullable until paid) |
+| `user_id` | UUID | Supabase user who initiated payment |
+| `razorpay_order_id` | string | Razorpay Order ID (`order_XXXXXXXX`) — unique, created server-side |
+| `razorpay_payment_id` | string | Razorpay Payment ID (`pay_XXXXXXXX`) — filled after payment |
+| `razorpay_signature` | string | HMAC-SHA256 signature — filled after server-side verification |
+| `amount_paise` | integer | Total charged amount in paise (₹1 = 100 paise) |
+| `currency` | string | Always `INR` for domestic payments |
+| `status` | enum | `created` → `attempted` → `paid` / `failed` / `refunded` |
+| `failure_reason` | string | Human-readable failure description (populated on failure) |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+| `updated_at` | datetime | ISO 8601 last-updated timestamp |
+
 
 #### 4.5 PackagingJob
 
@@ -1087,7 +1110,225 @@ Endpoints enabling store administrators to list catalog products on Amazon Marke
 Receives `LISTINGS_ITEM_STATUS_CHANGE` and `LISTINGS_ITEM_ISSUES_CHANGE` events from Amazon SNS via SQS. Parses the notification, maps statuses (`BUYABLE` → `ACTIVE`, `SUPPRESSED` → `SUPPRESSED`), and updates the `amazon_listings` table. Populates the `asin` column when provided. Returns `200 OK` immediately to prevent SNS retry loops.
  
 ---
- 
+
+#### 5.12 Payment Gateway — Razorpay *(Spec #17)*
+
+The payment flow is a **three-step server-driven sequence**. All amounts are computed server-side from the database. The frontend never sends an amount.
+
+##### Flow Summary
+
+```
+Customer Browser              Django Backend             Razorpay
+     |                             |                          |
+     |-- POST /payments/create-order/ -->                     |
+     |   { reservation_id }        |                          |
+     |                    create_razorpay_order() ----------->|
+     |<--------------------------- |<------- { order_id } ---|
+     |<-- { razorpay_order_id,     |                          |
+     |     razorpay_key_id,        |                          |
+     |     amount_paise }          |                          |
+     |                             |                          |
+     |  [User completes payment in Razorpay widget]           |
+     |                             |                          |
+     |<-- { payment_id, signature }|-- payment.captured -->   |
+     |                             |                          |
+     |-- POST /payments/verify/ -->|                          |
+     |   { order_id, payment_id,   |                          |
+     |     signature }             |                          |
+     |                   verify_payment_signature()           |
+     |                   [atomic: stock--, order++]           |
+     |<-- { order_id, status: 'completed' }                   |
+     |                             |                          |
+     |                   POST /payments/webhook/ <------------|
+     |                   (idempotent no-op if paid)           |
+```
+
+> **Security invariant:** `RAZORPAY_KEY_SECRET` never leaves the server. Signature verification uses `hmac.compare_digest` to prevent timing attacks. All amounts are computed from the database — the frontend sends zero financial values.
+
+---
+
+##### `POST /api/v1/payments/create-order/` — Step 1: Create Razorpay Order
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` (any logged-in user) |
+
+**Request Body:**
+
+```json
+{
+  "reservation_id": "<uuid>"
+}
+```
+
+**Response (201):**
+
+```json
+{
+  "razorpay_order_id": "order_XXXXXXXXXXXXXXXX",
+  "razorpay_key_id": "rzp_test_xxxxxxxxxxxx",
+  "amount_paise": 120000,
+  "currency": "INR",
+  "reservation_id": "<uuid>"
+}
+```
+
+> **Frontend note:** Pass `razorpay_order_id`, `razorpay_key_id`, and `amount_paise` to the Razorpay JS Checkout widget to render the payment UI. The `razorpay_key_id` is the public key — safe to use in the browser.
+
+**Key Behaviours:**
+- Amount is computed server-side as `subtotal + GST` in paise. Frontend never sends an amount.
+- **Idempotent:** calling this twice for the same reservation returns the existing Razorpay order ID (no duplicate charge).
+- Returns `410 Gone` if the reservation has expired.
+
+**Error Responses:**
+
+| Status | Condition |
+|---|---|
+| `400` | Missing or invalid `reservation_id` |
+| `404` | No active reservation found for this user |
+| `410` | Reservation has expired — prompt user to restart checkout |
+| `502` | Razorpay API unreachable |
+
+---
+
+##### `POST /api/v1/payments/verify/` — Step 2: Verify & Commit
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Called by the frontend **after** the Razorpay JS SDK returns success. Verifies the HMAC-SHA256 signature, then atomically: decrements stock, marks reservation `completed`, creates the `Order`, marks the `PaymentTransaction` as `paid`.
+
+**Request Body:**
+
+```json
+{
+  "razorpay_order_id": "order_XXXXXXXXXXXXXXXX",
+  "razorpay_payment_id": "pay_XXXXXXXXXXXXXXXX",
+  "razorpay_signature": "<hmac-sha256-hex>"
+}
+```
+
+**Response (201):**
+
+```json
+{
+  "order_id": "<uuid>",
+  "total_amount": "1200.00",
+  "gst_amount": "183.05",
+  "payment_status": "completed",
+  "razorpay_payment_id": "pay_XXXXXXXXXXXXXXXX"
+}
+```
+
+**Error Responses:**
+
+| Status | Condition |
+|---|---|
+| `400` | Missing parameters; or HMAC signature verification failed (no stock decrement) |
+| `404` | Payment transaction not found |
+| `409` | Insufficient physical stock at commit time |
+| `410` | Reservation expired before payment could be committed |
+| `503` | Database error |
+
+> **Frontend note:** This is idempotent — calling verify twice with the same `razorpay_order_id` returns the existing order without re-decrementing stock.
+
+---
+
+##### `POST /api/v1/payments/webhook/` — Razorpay Async Notification
+
+| Property | Value |
+|---|---|
+| **Auth** | None (verified via `X-Razorpay-Signature` HMAC header using `RAZORPAY_WEBHOOK_SECRET`) |
+| **CSRF** | Exempt (`@csrf_exempt`) |
+
+Razorpay's authoritative payment confirmation path. Required for UPI collect, net banking, and auto-debit flows where the user redirect may never reach the frontend. This endpoint is the ground truth — not the frontend `verify/` call.
+
+**Handled Events:**
+
+| Event | Action |
+|---|---|
+| `payment.captured` | Idempotently commits stock + creates order (no-op if `verify/` already ran) |
+| `payment.failed` | Marks `PaymentTransaction.status = 'failed'` |
+| `refund.created` | Marks `PaymentTransaction.status = 'refunded'` |
+
+Always returns `HTTP 200` to Razorpay — failure to do so causes webhook retries.
+
+> **Frontend note:** The frontend does not interact with this endpoint. It is called by Razorpay's servers directly.
+
+---
+
+##### `POST /api/v1/payments/refund/` — Issue Refund
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+Staff/Manager-only. Calls the Razorpay Refunds API and atomically reverses the stock decrement.
+
+**Request Body:**
+
+```json
+{
+  "order_id": "<uuid>",
+  "reason": "Customer requested cancellation"
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "razorpay_refund_id": "rfnd_XXXXXXXXXXXXXXXX",
+  "amount_refunded_paise": 120000,
+  "status": "refunded"
+}
+```
+
+**Error Responses:**
+
+| Status | Condition |
+|---|---|
+| `403` | Caller is not staff or manager |
+| `404` | No paid transaction found for this order |
+| `502` | Razorpay Refund API call failed |
+| `207` | Refund issued but stock reversal failed — manual inventory correction required |
+
+---
+
+##### `GET /api/v1/payments/status/<uuid:order_id>/` — Payment Status
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` (owner sees own; staff/manager sees any) |
+
+**Response (200):**
+
+```json
+{
+  "order_id": "<uuid>",
+  "razorpay_order_id": "order_XXXXXXXXXXXXXXXX",
+  "razorpay_payment_id": "pay_XXXXXXXXXXXXXXXX",
+  "status": "paid",
+  "amount_paise": 120000,
+  "currency": "INR",
+  "failure_reason": null,
+  "created_at": "2026-06-08T10:00:00Z"
+}
+```
+
+**status enum values:**
+
+| Value | Meaning |
+|---|---|
+| `created` | Razorpay order created, user hasn't paid yet |
+| `attempted` | User started payment flow |
+| `paid` | Payment confirmed and order committed |
+| `failed` | Payment failed or signature mismatch |
+| `refunded` | Full refund issued |
+
+---
+
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -1149,9 +1390,10 @@ Some endpoints include additional context fields:
 | #14 | WhatsApp Commerce Engine | `whatsapp/webhook/` |
 | #15 | External Partner API Gateway | `external/inventory/sync/`, `external/shipments/update/`, `admin/api-keys/`, `admin/api-keys/<uuid:pk>/revoke/` |
 | #16 | Security Hardening & Rate Limiting | `health/`, `auth/logout/` |
-| #17 | Payment Gateway (Razorpay) | Payment processing — will add payment initiation/webhook endpoints |
+| #17 | Payment Gateway (Razorpay) | `payments/create-order/`, `payments/verify/`, `payments/webhook/`, `payments/refund/`, `payments/status/<id>/` |
 | #18 | POS Cash Sales & In-Store Billing | Point-of-sale terminal backend |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
+
  
 ---
  
@@ -1214,6 +1456,13 @@ POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Ta
 # ── WhatsApp Commerce Engine (Public Webhooks / Meta Challenge-Signature Verified) ─
 GET     /api/v1/whatsapp/webhook/                          → WhatsApp webhook verification challenge
 POST    /api/v1/whatsapp/webhook/                          → Process incoming WhatsApp message
+
+# ── Payment Gateway / Razorpay (Spec #17 — pending KYC pre-requisites) ────────
+POST    /api/v1/payments/create-order/               → Step 1: Create Razorpay order (returns razorpay_order_id + amount)
+POST    /api/v1/payments/verify/                     → Step 2: Verify HMAC signature + atomic stock commit
+POST    /api/v1/payments/webhook/                    → Razorpay async webhook (payment.captured / failed / refund.created)
+POST    /api/v1/payments/refund/                     → Issue refund + reverse stock (Staff/Manager only)
+GET     /api/v1/payments/status/<uuid:order_id>/     → Payment status for an order
 
 # ── External Partner & Admin API Key Gateway (Completed) ──────────────────
 POST    /api/v1/external/inventory/sync/                   → Reconcile ERP inventory stock delta

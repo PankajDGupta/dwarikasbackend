@@ -14,6 +14,159 @@ Close the security gap introduced in Spec 08 where `POST /api/v1/orders/confirm/
 
 ---
 
+## Pre-Requisites (Manual — Must Complete Before Implementation)
+
+> [!IMPORTANT]
+> All items in this section require **human action on external portals**. No code can be tested end-to-end until every step here is complete. Steps 1–4 require Razorpay KYC approval, which can take **2–5 business days**.
+
+### Step 1 — Create a Razorpay Merchant Account
+
+1. Go to [dashboard.razorpay.com](https://dashboard.razorpay.com) and register with your business email.
+2. Verify your email address and complete the basic account setup.
+3. The account starts in **Test Mode** by default. All development work uses Test Mode until KYC is approved.
+
+### Step 2 — Complete KYC (Required for Live Payments)
+
+Navigate to **Dashboard → Account & Settings → KYC** and upload:
+
+| Document | Format | Notes |
+|---|---|---|
+| **GST Certificate** | PDF/Image | Must be active and match business name |
+| **PAN Card** | PDF/Image | Business entity PAN (not personal, if Pvt Ltd) |
+| **Cancelled Cheque** | PDF/Image | Bank account where Razorpay will settle funds |
+| **Director's Aadhaar** | PDF/Image | Aadhaar of the authorised signatory |
+
+> [!CAUTION]
+> KYC approval takes **2–5 business days**. Until approved, only Test Mode keys work. Plan accordingly — do not schedule a production launch without confirmed KYC approval.
+
+### Step 3 — Link a Settlement Bank Account
+
+Navigate to **Dashboard → Account & Settings → Bank Account** and add the Dwarikas business bank account. Settlement will be credited here after Razorpay's T+2 settlement cycle.
+
+### Step 4 — Generate API Keys
+
+Navigate to **Dashboard → Settings → API Keys → Generate Key**:
+
+| Key Type | When to Generate | Usage |
+|---|---|---|
+| **Test Mode keys** | Immediately after account creation | Local development and CI |
+| **Live Mode keys** | After KYC approval only | Production Cloud Run deployment |
+
+Two values are generated per environment:
+- `RAZORPAY_KEY_ID` — starts with `rzp_test_` (test) or `rzp_live_` (live). **Safe to send to frontend.**
+- `RAZORPAY_KEY_SECRET` — shown once at generation time. **Must never leave the server.**
+
+> [!CAUTION]
+> The `RAZORPAY_KEY_SECRET` is displayed **only once** at generation time. Copy it immediately and store it in a password manager before closing the dialog. If lost, you must regenerate the key pair.
+
+### Step 5 — Register the Webhook Endpoint
+
+Navigate to **Dashboard → Settings → Webhooks → + Add New Webhook**:
+
+| Field | Value |
+|---|---|
+| **Webhook URL** | `https://<your-cloud-run-domain>/api/v1/payments/webhook/` |
+| **Secret** | Generate a strong random string (store it immediately — shown once) |
+| **Active Events** | ✅ `payment.captured` ✅ `payment.failed` ✅ `refund.created` |
+
+> [!CAUTION]
+> The **Webhook Secret** is a separate credential from the API Key Secret. It is shown **only once** at webhook creation time. Store it immediately. If lost, delete the webhook and recreate it.
+
+For **local development**, Razorpay cannot reach `localhost`. Use one of:
+- **ngrok**: `ngrok http 8000` — paste the `https://xxxx.ngrok-free.app` URL temporarily into the webhook settings.
+- **Razorpay Test Webhook Simulator**: Dashboard → Webhooks → your webhook → Trigger Test Webhook (does not require a public URL).
+
+### Step 6 — Store Credentials in Google Secret Manager
+
+All three Razorpay credentials must be stored in Google Secret Manager before Cloud Run deployment. Run these commands once:
+
+```bash
+# Create the secret slots
+gcloud secrets create RAZORPAY_KEY_ID --replication-policy="automatic"
+gcloud secrets create RAZORPAY_KEY_SECRET --replication-policy="automatic"
+gcloud secrets create RAZORPAY_WEBHOOK_SECRET --replication-policy="automatic"
+
+# Populate with actual values from Razorpay Dashboard
+echo -n "<actual_key_id>" | gcloud secrets versions add RAZORPAY_KEY_ID --data-file=-
+echo -n "<actual_key_secret>" | gcloud secrets versions add RAZORPAY_KEY_SECRET --data-file=-
+echo -n "<actual_webhook_secret>" | gcloud secrets versions add RAZORPAY_WEBHOOK_SECRET --data-file=-
+
+# Grant Cloud Run service account read access to all three secrets
+gcloud secrets add-iam-policy-binding RAZORPAY_KEY_ID \
+  --member="serviceAccount:<cloud-run-sa>@<project>.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding RAZORPAY_KEY_SECRET \
+  --member="serviceAccount:<cloud-run-sa>@<project>.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding RAZORPAY_WEBHOOK_SECRET \
+  --member="serviceAccount:<cloud-run-sa>@<project>.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+For **local development**, add these to your `.env` file:
+```
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret_here
+```
+
+### Step 7 — Apply the Supabase Database Migration
+
+The `payment_transactions` table is declared with `managed = False` in Django — Django will **not** create it automatically. You must apply the migration manually before starting the server.
+
+Run each statement individually via the Supabase CLI (per the project convention in `system_design.md`):
+
+```bash
+supabase db query "CREATE TABLE IF NOT EXISTS public.payment_transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), reservation_id UUID REFERENCES public.reservations(id) ON DELETE SET NULL, order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL, user_id UUID NOT NULL, razorpay_order_id TEXT UNIQUE NOT NULL, razorpay_payment_id TEXT, razorpay_signature TEXT, amount_paise INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'INR', status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'attempted', 'paid', 'failed', 'refunded')), failure_reason TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());"
+
+supabase db query "CREATE INDEX IF NOT EXISTS idx_payment_txn_rp_order ON public.payment_transactions(razorpay_order_id);"
+
+supabase db query "CREATE INDEX IF NOT EXISTS idx_payment_txn_user ON public.payment_transactions(user_id);"
+```
+
+Also apply the Order model schema patches (new `payment_method` and `payment_status` choices):
+
+```bash
+supabase db query "ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;"
+supabase db query "ALTER TABLE public.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('UPI', 'card', 'cash', 'online'));"
+supabase db query "ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_payment_status_check;"
+supabase db query "ALTER TABLE public.orders ADD CONSTRAINT orders_payment_status_check CHECK (payment_status IN ('pending', 'completed', 'failed', 'refunded'));"
+```
+
+Save the SQL snippet to `supabase/snippets/` as `003_payment_transactions.sql`.
+
+### Step 8 — Patch `cloudbuild.yaml` to Inject Razorpay Secrets
+
+Add the three new secrets to the `--update-secrets` flag on the Cloud Run deploy step:
+
+```yaml
+'--update-secrets=DATABASE_URL=django_settings:latest,JWT_SECRET_KEY=django_settings:latest,RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:latest,RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:latest,RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:latest'
+```
+
+### Pre-Requisite Checklist
+
+| # | Item | Owner | Status |
+|---|---|---|---|
+| 1 | Razorpay merchant account created | Business/Dev | ☐ |
+| 2 | KYC documents submitted | Business | ☐ |
+| 3 | KYC approved by Razorpay | Razorpay | ☐ |
+| 4 | Settlement bank account linked | Business | ☐ |
+| 5 | Test Mode API keys generated & saved | Dev | ☐ |
+| 6 | Live Mode API keys generated & saved (post-KYC) | Dev | ☐ |
+| 7 | Webhook URL registered with 3 event types | Dev | ☐ |
+| 8 | Webhook Secret saved immediately | Dev | ☐ |
+| 9 | All 3 secrets added to Google Secret Manager | Dev | ☐ |
+| 10 | Cloud Run SA granted `secretAccessor` on all 3 secrets | Dev | ☐ |
+| 11 | `payment_transactions` table created in Supabase | Dev | ☐ |
+| 12 | `orders` table constraints updated (new payment choices) | Dev | ☐ |
+| 13 | `.env` updated with test credentials for local dev | Dev | ☐ |
+| 14 | ngrok or test webhook simulator configured for local webhook testing | Dev | ☐ |
+| 15 | `cloudbuild.yaml` patched to inject 3 new secrets | Dev | ☐ |
+
+---
+
 ## Relationship to Existing Specs
 
 | Spec | Impact |
