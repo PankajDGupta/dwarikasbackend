@@ -225,6 +225,9 @@ Update this file after every meaningful implementation change.
 | 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | 🔲 Not started — spec written 2026-06-07 |
 | 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | 🔲 Not started — spec written 2026-06-07 |
+| 24b | Local Frontend–Backend Integration Test | frontend + all apps | 🔲 Not started — spec written 2026-06-07 |
+| 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
+| 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
 **Next immediate step:** Execute Spec #17 — Payment Gateway Integration (Razorpay).
 
