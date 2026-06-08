@@ -33,9 +33,22 @@ class OrderConfirmView(APIView):
                 {'error': 'reservation_id and payment_method are required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if payment_method not in ('UPI', 'card', 'cash'):
+
+        # Spec #17 compatibility: UPI and card payments must use the Razorpay flow
+        if payment_method in ('UPI', 'card'):
             return Response(
-                {'error': "payment_method must be one of: 'UPI', 'card', 'cash'."},
+                {
+                    'error': (
+                        'Online payments must use POST /api/v1/payments/create-order/ instead. '
+                        'This endpoint only accepts payment_method: "cash".'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if payment_method not in ('cash',):
+            return Response(
+                {'error': "payment_method must be 'cash'. For online payments use /api/v1/payments/create-order/."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

@@ -24,5 +24,6 @@ dependencies = [
     "django-axes>=6.4.0",
     "django-redis>=5.4.0",
     "redis>=5.0.0",
+    "razorpay>=1.4.1",               # Spec #17 — Razorpay Payment Gateway SDK
 ]
 

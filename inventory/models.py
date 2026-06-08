@@ -241,11 +241,13 @@ class Order(models.Model):
         ('UPI', 'UPI'),
         ('card', 'Card'),
         ('cash', 'Cash'),
+        ('online', 'Online'),   # Spec #17 — Razorpay-managed UPI/card payments
     ]
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('completed', 'Completed'),
         ('failed', 'Failed'),
+        ('refunded', 'Refunded'),   # Spec #17 — added for refund flow
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -95,11 +95,12 @@ class OrderConfirmationTests(TestCase):
         self.assertIn('error', response.data)
 
         # Missing reservation id
-        response = self.client.post(self.confirm_url, data={'payment_method': 'UPI'})
+        response = self.client.post(self.confirm_url, data={'payment_method': 'cash'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
 
     def test_confirm_invalid_payment_method_returns_400(self):
+        """Non-cash payment methods that are not in the valid set return 400."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
         response = self.client.post(self.confirm_url, data={
             'reservation_id': str(self.reservation.id),
@@ -108,11 +109,21 @@ class OrderConfirmationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
 
+    def test_confirm_upi_returns_400_and_redirects_to_payments_flow(self):
+        """Spec #17 compat: UPI/card at orders/confirm/ must redirect to the Razorpay flow."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
+        response = self.client.post(self.confirm_url, data={
+            'reservation_id': str(self.reservation.id),
+            'payment_method': 'UPI'
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('create-order', response.data['error'])
+
     def test_confirm_invalid_uuid_returns_400(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
         response = self.client.post(self.confirm_url, data={
             'reservation_id': 'invalid-uuid-string',
-            'payment_method': 'UPI'
+            'payment_method': 'cash'
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
@@ -123,14 +134,14 @@ class OrderConfirmationTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
         response = self.client.post(self.confirm_url, data={
             'reservation_id': str(self.reservation.id),
-            'payment_method': 'UPI'
+            'payment_method': 'cash'   # cash is the only valid method at this endpoint
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Check response structure
         data = response.data
         self.assertIn('order_id', data)
-        self.assertEqual(data['payment_method'], 'UPI')
+        self.assertEqual(data['payment_method'], 'cash')
         self.assertEqual(data['payment_status'], 'completed')
         
         # Subtotal: 100 * 2 = 200. GST: 200 * 18% = 36. Total: 236
@@ -151,7 +162,7 @@ class OrderConfirmationTests(TestCase):
         self.assertEqual(str(order.user_id), CUSTOMER_UUID)
         self.assertEqual(order.total_amount, Decimal('236.00'))
         self.assertEqual(order.gst_amount, Decimal('36.00'))
-        self.assertEqual(order.payment_method, 'UPI')
+        self.assertEqual(order.payment_method, 'cash')
         self.assertEqual(order.payment_status, 'completed')
 
     # ── Expiry Guard ──────────────────────────────────────────────────────────
@@ -164,7 +175,7 @@ class OrderConfirmationTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
         response = self.client.post(self.confirm_url, data={
             'reservation_id': str(self.reservation.id),
-            'payment_method': 'card'
+            'payment_method': 'cash'
         })
         self.assertEqual(response.status_code, status.HTTP_410_GONE)
         self.assertIn('expired', response.data['error'])
@@ -212,7 +223,7 @@ class OrderConfirmationTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.customer_token}")
         response = self.client.post(self.confirm_url, data={
             'reservation_id': str(self.reservation.id),
-            'payment_method': 'card'
+            'payment_method': 'cash'
         })
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertIn('Insufficient physical stock', response.data['error'])
@@ -239,7 +250,7 @@ class OrderConfirmationTests(TestCase):
             
             response = self.client.post(self.confirm_url, data={
                 'reservation_id': str(self.reservation.id),
-                'payment_method': 'card'
+                'payment_method': 'cash'
             })
             self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
 

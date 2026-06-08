@@ -1457,7 +1457,7 @@ POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Ta
 GET     /api/v1/whatsapp/webhook/                          → WhatsApp webhook verification challenge
 POST    /api/v1/whatsapp/webhook/                          → Process incoming WhatsApp message
 
-# ── Payment Gateway / Razorpay (Spec #17 — pending KYC pre-requisites) ────────
+# ── Payment Gateway / Razorpay (Completed) ──────────────────────────
 POST    /api/v1/payments/create-order/               → Step 1: Create Razorpay order (returns razorpay_order_id + amount)
 POST    /api/v1/payments/verify/                     → Step 2: Verify HMAC signature + atomic stock commit
 POST    /api/v1/payments/webhook/                    → Razorpay async webhook (payment.captured / failed / refund.created)

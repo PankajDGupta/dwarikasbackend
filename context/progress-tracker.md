@@ -4,14 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #16: Security Hardening & Rate Limiting — **Complete**
+- Spec #17: Payment Gateway Integration (Razorpay) — **Complete**
  
 ## Current Goal
  
-- Implement Payment Gateway Integration (Razorpay) (Spec #17)
-  - ⚠️ **Blocked on manual pre-requisites** — see `context/feature-spec/spec17-Payment_Gateway_Integration.md` § Pre-Requisites
-  - KYC submission and API key generation must happen before any integration work begins
-  - Razorpay KYC approval can take 2–5 business days
+- Implement POS Cash Sales & In-Store Bill Generation (Spec #18)
+
 
 
 ## Completed
@@ -200,6 +198,15 @@ Update this file after every meaningful implementation change.
   - Written 9 comprehensive unit and integration tests verifying all security checks.
   - **Completed:** 2026-06-06T23:58:00+05:30
 
+- ✅ Spec #17 - Payment Gateway Integration (Razorpay) (`payments/`)
+  - Created `payments/` Django application and registered it in settings.
+  - Implemented `PaymentTransaction` unmanaged Django model to serve as payment audit logs.
+  - Developed `razorpay_client.py` API wrapper for order creation, signature verification, and refunds using safe `hmac.compare_digest`.
+  - Built DRF endpoints for order creation, HMAC-SHA256 signature verification, webhook notification (payment capture, failure, refund), refund execution with stock reversal, and transaction status queries.
+  - Updated legacy `OrderConfirmView` to reject UPI/card checkout methods and route to Razorpay checkout workflow.
+  - Configured test runner to create database tables for `PaymentTransaction` during testing and added 50 comprehensive unit/integration test cases.
+  - **Completed:** 2026-06-08T22:31:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -220,7 +227,7 @@ Update this file after every meaningful implementation change.
 | 14 | WhatsApp Commerce Engine | `whatsapp/` | ✅ Complete |
 | 15 | External Partner API Gateway | `api/`, `inventory/` | ✅ Complete |
 | 16 | Security Hardening & Rate Limiting | `api/` | ✅ Complete |
-| 17 | Payment Gateway Integration (Razorpay) | `payments/` | ⚠️ Pre-requisites pending — spec updated 2026-06-08 with KYC/webhook/secrets checklist |
+| 17 | Payment Gateway Integration (Razorpay) | `payments/` | ✅ Complete |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
 | 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
 | 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
@@ -232,7 +239,8 @@ Update this file after every meaningful implementation change.
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #17 — Payment Gateway Integration (Razorpay).
+**Next immediate step:** Execute Spec #18 — POS Cash Sales & In-Store Bill Generation.
+
 
 
 ## Open Questions

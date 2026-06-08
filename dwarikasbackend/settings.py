@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'tasks.apps.TasksConfig',
     'ondc.apps.OndcConfig',
     'whatsapp.apps.WhatsappConfig',
+    'payments.apps.PaymentsConfig',   # Spec #17 — Razorpay Payment Gateway
 ]
 
 
