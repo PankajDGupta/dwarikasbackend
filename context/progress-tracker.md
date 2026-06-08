@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #17: Payment Gateway Integration (Razorpay) — **Complete**
+- Spec #18: POS Cash Sales & In-Store Bill Generation — **Complete**
  
 ## Current Goal
  
-- Implement POS Cash Sales & In-Store Bill Generation (Spec #18)
+- Implement Promotions & Discounts (Spec #19)
 
 
 
@@ -207,6 +207,16 @@ Update this file after every meaningful implementation change.
   - Configured test runner to create database tables for `PaymentTransaction` during testing and added 50 comprehensive unit/integration test cases.
   - **Completed:** 2026-06-08T22:31:00+05:30
 
+- ✅ Spec #18 - POS Cash Sales & In-Store Bill Generation (`pos/`)
+  - Created `pos/` Django application and registered it in settings.
+  - Implemented `PosCart`, `PosCartItem`, and `OrderItem` unmanaged models.
+  - Created Django and Supabase SQL migrations for tables, indexes, and RLS policies.
+  - Developed REST endpoints for cart creation, item upsert/delete, detail view with live ATP, checkout confirmation with pessimistic stock locking and atomic decrement, cart abandonment, and past invoice retrieval.
+  - Implemented automatic intra-state GST splitting (CGST/SGST) and change calculation on checkout bills.
+  - Integrated `STORE_GSTIN`, `STORE_NAME`, and `STORE_ADDRESS` configuration variables.
+  - Added 15 comprehensive unit and integration test cases covering RBAC, upsert, ATP, cash, transaction boundaries, snapshots, and reprints.
+  - **Completed:** 2026-06-08T23:35:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -228,7 +238,7 @@ Update this file after every meaningful implementation change.
 | 15 | External Partner API Gateway | `api/`, `inventory/` | ✅ Complete |
 | 16 | Security Hardening & Rate Limiting | `api/` | ✅ Complete |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | ✅ Complete |
-| 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | 🔲 Not started — spec written 2026-06-03 |
+| 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | ✅ Complete |
 | 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
 | 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
@@ -239,7 +249,7 @@ Update this file after every meaningful implementation change.
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #18 — POS Cash Sales & In-Store Bill Generation.
+**Next immediate step:** Execute Spec #19 — Promotions & Discounts.
 
 
 

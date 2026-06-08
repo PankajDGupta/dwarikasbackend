@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'ondc.apps.OndcConfig',
     'whatsapp.apps.WhatsappConfig',
     'payments.apps.PaymentsConfig',   # Spec #17 — Razorpay Payment Gateway
+    'pos.apps.PosConfig',             # Spec #18 — POS Cash Sales & In-Store Bill Generation
 ]
 
 

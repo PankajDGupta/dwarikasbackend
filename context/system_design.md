@@ -206,6 +206,50 @@ CREATE TABLE public.payment_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_payment_txn_rp_order ON public.payment_transactions(razorpay_order_id);
 CREATE INDEX IF NOT EXISTS idx_payment_txn_user ON public.payment_transactions(user_id);
+
+-- POS Carts table (Spec #18)
+CREATE TABLE IF NOT EXISTS public.pos_carts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    staff_user_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    customer_phone  TEXT,
+    status          TEXT NOT NULL DEFAULT 'open'
+                    CHECK (status IN ('open', 'confirmed', 'abandoned')),
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_cart_staff ON public.pos_carts(staff_user_id);
+
+-- POS Cart line items (Spec #18)
+CREATE TABLE IF NOT EXISTS public.pos_cart_items (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cart_id     UUID NOT NULL REFERENCES public.pos_carts(id) ON DELETE CASCADE,
+    variant_id  UUID NOT NULL REFERENCES public.product_variants(id) ON DELETE CASCADE,
+    quantity    INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price  NUMERIC(12, 2) NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (cart_id, variant_id)
+);
+
+-- Order line items (Spec #18)
+CREATE TABLE IF NOT EXISTS public.order_items (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id                UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    variant_id              UUID REFERENCES public.product_variants(id) ON DELETE SET NULL,
+    sku_snapshot            TEXT NOT NULL,
+    product_name_snapshot   TEXT NOT NULL,
+    hsn_code_snapshot       TEXT NOT NULL,
+    gst_slab_snapshot       NUMERIC(5, 2) NOT NULL,
+    quantity                INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price              NUMERIC(12, 2) NOT NULL,
+    subtotal                NUMERIC(12, 2) NOT NULL,
+    gst_amount              NUMERIC(12, 2) NOT NULL,
+    line_total              NUMERIC(12, 2) NOT NULL,
+    created_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items(order_id);
+```,StartLine:206,TargetContent:
 ```
 
 ### Row Level Security (RLS) Structural Mitigations

@@ -1327,7 +1327,193 @@ Staff/Manager-only. Calls the Razorpay Refunds API and atomically reverses the s
 | `failed` | Payment failed or signature mismatch |
 | `refunded` | Full refund issued |
 
+
 ---
+
+#### 5.13 POS Cash Sales & In-Store Bill Generation *(Spec #18)*
+
+Physical store checkout flow where floor staff scans multiple items for a walk-in customer paying cash.
+
+##### `POST /api/v1/pos/cart/` — Create POS Cart
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body (optional):**
+```json
+{
+  "customer_phone": "9876543210"
+}
+```
+
+**Response (201):**
+```json
+{
+  "cart_id": "uuid",
+  "status": "open",
+  "customer_phone": "9876543210"
+}
+```
+
+---
+
+##### `POST /api/v1/pos/cart/<uuid:cart_id>/items/` — Add Item to Cart
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "variant_id": "uuid",
+  "quantity": 2
+}
+```
+
+**Response (201 or 200 if upserted):**
+```json
+{
+  "item_id": "uuid",
+  "variant_id": "uuid",
+  "sku": "DW-RICE-1KG",
+  "product_name": "Basmati Rice",
+  "quantity": 2,
+  "unit_price": "120.00",
+  "line_subtotal": "240.00"
+}
+```
+
+---
+
+##### `DELETE /api/v1/pos/cart/<uuid:cart_id>/items/<uuid:item_id>/` — Remove Item from Cart
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response:** `204 No Content`
+
+---
+
+##### `GET /api/v1/pos/cart/<uuid:cart_id>/` — View Cart Detail
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response (200):**
+```json
+{
+  "cart_id": "uuid",
+  "status": "open",
+  "customer_phone": "9876543210",
+  "items": [
+    {
+      "item_id": "uuid",
+      "variant_id": "uuid",
+      "sku": "DW-RICE-1KG",
+      "product_name": "Basmati Rice",
+      "hsn_code": "1006",
+      "gst_slab": "18.00",
+      "quantity": 2,
+      "unit_price": "120.00",
+      "subtotal": "240.00",
+      "gst_amount": "43.20",
+      "line_total": "283.20",
+      "atp_available": 48,
+      "stock_ok": true
+    }
+  ],
+  "totals": {
+    "subtotal": "240.00",
+    "total_gst": "43.20",
+    "grand_total": "283.20"
+  }
+}
+```
+
+---
+
+##### `POST /api/v1/pos/cart/<uuid:cart_id>/confirm/` — Confirm POS Cash Sale
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "cash_tendered": "500.00",
+  "payment_method": "cash"
+}
+```
+
+**Response (201):**
+```json
+{
+  "bill_type": "POS_CASH",
+  "order_id": "uuid",
+  "order_date": "2026-06-08T18:00:00Z",
+  "customer_phone": "9876543210",
+  "line_items": [
+    {
+      "sku": "DW-RICE-1KG",
+      "product_name": "Basmati Rice",
+      "hsn_code": "1006",
+      "gst_slab": "18.00",
+      "quantity": 2,
+      "unit_price": "120.00",
+      "subtotal": "240.00",
+      "cgst": "21.60",
+      "sgst": "21.60",
+      "gst_total": "43.20",
+      "line_total": "283.20"
+    }
+  ],
+  "totals": {
+    "subtotal": "240.00",
+    "total_cgst": "21.60",
+    "total_sgst": "21.60",
+    "total_gst": "43.20",
+    "grand_total": "283.20"
+  },
+  "payment": {
+    "method": "cash",
+    "cash_tendered": "500.00",
+    "change_due": "216.80"
+  },
+  "store": {
+    "name": "Dwarikas",
+    "address": "123 Retail Lane",
+    "gstin": "YOUR_GSTIN_HERE"
+  }
+}
+```
+
+---
+
+##### `DELETE /api/v1/pos/cart/<uuid:cart_id>/abandon/` — Abandon POS Cart
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response:** `204 No Content`
+
+---
+
+##### `GET /api/v1/pos/bill/<uuid:order_id>/` — Reprint/Re-fetch Printable Bill
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response (200):** Same structure as the `confirm` bill payload response.
+
+---
+
 
 ### 6. Standard Error Response Format
 
@@ -1391,7 +1577,7 @@ Some endpoints include additional context fields:
 | #15 | External Partner API Gateway | `external/inventory/sync/`, `external/shipments/update/`, `admin/api-keys/`, `admin/api-keys/<uuid:pk>/revoke/` |
 | #16 | Security Hardening & Rate Limiting | `health/`, `auth/logout/` |
 | #17 | Payment Gateway (Razorpay) | `payments/create-order/`, `payments/verify/`, `payments/webhook/`, `payments/refund/`, `payments/status/<id>/` |
-| #18 | POS Cash Sales & In-Store Billing | Point-of-sale terminal backend |
+| #18 | POS Cash Sales & In-Store Billing | `pos/cart/`, `pos/cart/<id>/`, `pos/cart/<id>/items/`, `pos/cart/<id>/confirm/`, `pos/bill/<order_id>/` |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
 
  
@@ -1456,6 +1642,15 @@ POST    /api/v1/ondc/tasks/callback/                       → Internal Cloud Ta
 # ── WhatsApp Commerce Engine (Public Webhooks / Meta Challenge-Signature Verified) ─
 GET     /api/v1/whatsapp/webhook/                          → WhatsApp webhook verification challenge
 POST    /api/v1/whatsapp/webhook/                          → Process incoming WhatsApp message
+
+# ── POS Cash Sales & In-Store Billing (Completed) ──────────────────────────
+POST    /api/v1/pos/cart/                                  → Create POS cart session
+POST    /api/v1/pos/cart/<uuid:cart_id>/items/             → Add item/quantity to cart
+DELETE  /api/v1/pos/cart/<uuid:cart_id>/items/<uuid:item_id>/ → Remove item from cart
+GET     /api/v1/pos/cart/<uuid:cart_id>/                   → View cart contents with ATP
+POST    /api/v1/pos/cart/<uuid:cart_id>/confirm/           → Confirm POS sale atomically
+DELETE  /api/v1/pos/cart/<uuid:cart_id>/abandon/           → Abandon POS cart session
+GET     /api/v1/pos/bill/<uuid:order_id>/                  → Reprint/Re-fetch invoice
 
 # ── Payment Gateway / Razorpay (Completed) ──────────────────────────
 POST    /api/v1/payments/create-order/               → Step 1: Create Razorpay order (returns razorpay_order_id + amount)
