@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'whatsapp.apps.WhatsappConfig',
     'payments.apps.PaymentsConfig',   # Spec #17 — Razorpay Payment Gateway
     'pos.apps.PosConfig',             # Spec #18 — POS Cash Sales & In-Store Bill Generation
+    'promotions.apps.PromotionsConfig', # Spec #19 — Promotions & Discounts
 ]
 
 

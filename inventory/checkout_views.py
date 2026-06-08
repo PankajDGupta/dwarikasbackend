@@ -124,12 +124,20 @@ class CheckoutReserveView(APIView):
                     )
 
                 # ── PHASE 3: Create timed reservation ────────────────────────
+                from decimal import Decimal
+                from promotions.services import get_active_promotion_for_variant
+                promo = get_active_promotion_for_variant(variant)
+                effective_price = Decimal(promo['effective_price']) if promo else variant.retail_price
+                promotion_id = uuid.UUID(promo['promotion_id']) if promo else None
+
                 reservation = Reservation.objects.create(
                     variant_id=variant.id,
                     user_id=user_id,
                     reserved_quantity=purchase_qty,
                     expires_at=now + timedelta(minutes=RESERVATION_TTL_MINUTES),
                     status='active',
+                    effective_price=effective_price,
+                    promotion_id=promotion_id,
                 )
 
                 return Response(
@@ -139,6 +147,8 @@ class CheckoutReserveView(APIView):
                         'reserved_quantity': purchase_qty,
                         'expires_at': reservation.expires_at.isoformat(),
                         'status': 'active',
+                        'effective_price': str(reservation.effective_price) if reservation.effective_price is not None else None,
+                        'promotion_id': str(reservation.promotion_id) if reservation.promotion_id is not None else None,
                     },
                     status=status.HTTP_201_CREATED,
                 )

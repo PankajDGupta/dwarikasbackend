@@ -169,7 +169,9 @@ CREATE TABLE public.reservations (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     reserved_quantity INTEGER NOT NULL CHECK (reserved_quantity > 0),
     expires_at TIMESTAMPTZ NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('active', 'completed', 'expired')) DEFAULT 'active'
+    status TEXT NOT NULL CHECK (status IN ('active', 'completed', 'expired')) DEFAULT 'active',
+    effective_price NUMERIC(12, 2),
+    promotion_id UUID REFERENCES public.promotions(id) ON DELETE SET NULL
 );
 
 -- Complete order transaction logs  
@@ -249,6 +251,52 @@ CREATE TABLE IF NOT EXISTS public.order_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON public.order_items(order_id);
+
+-- promotions table
+CREATE TABLE public.promotions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title               TEXT NOT NULL,
+    description         TEXT,
+    discount_type       TEXT NOT NULL CHECK (discount_type IN ('percentage', 'flat_amount')),
+    discount_value      NUMERIC(10, 2) NOT NULL,
+    max_discount_cap    NUMERIC(10, 2),
+    min_order_value     NUMERIC(10, 2),
+    banner_image_url    TEXT,
+    starts_at           TIMESTAMPTZ NOT NULL,
+    ends_at             TIMESTAMPTZ,
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by          UUID NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- promotion_items table
+CREATE TABLE public.promotion_items (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    promotion_id    UUID NOT NULL REFERENCES public.promotions(id) ON DELETE CASCADE,
+    product_id      UUID REFERENCES public.products(id) ON DELETE CASCADE,
+    variant_id      UUID REFERENCES public.product_variants(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_product_or_variant CHECK (
+        product_id IS NOT NULL OR variant_id IS NOT NULL
+    )
+);
+
+-- promotion_broadcasts table
+CREATE TABLE public.promotion_broadcasts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    promotion_id    UUID NOT NULL REFERENCES public.promotions(id) ON DELETE CASCADE,
+    phone_number    TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+    failure_reason  TEXT,
+    sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    sent_by         UUID NOT NULL
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_promotions_active_dates ON public.promotions (is_active, starts_at, ends_at);
+CREATE INDEX IF NOT EXISTS idx_promotion_items_product ON public.promotion_items (product_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_items_variant ON public.promotion_items (variant_id);
+CREATE INDEX IF NOT EXISTS idx_promotion_broadcasts_promotion ON public.promotion_broadcasts (promotion_id);
 ```,StartLine:206,TargetContent:
 ```
 

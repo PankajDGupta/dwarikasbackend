@@ -153,6 +153,7 @@ All list views support these query-parameter backends:
 | `net_quantity` | decimal(10,2) | No | Net quantity value |
 | `net_weight_value` | decimal(10,3) | No | Net weight for repackaged items |
 | `unit_of_measure` | enum | No (default: `unit`) | `unit`, `kg`, `g`, `litre`, `ml`, `L`, `pcs`, `pack` |
+| `active_promotion` | nested object | No | Active promotion details if applicable (read-only, nullable) |
 | `created_at` | datetime | Auto | ISO 8601 creation timestamp |
 
 #### 4.3 Reservation
@@ -165,6 +166,8 @@ All list views support these query-parameter backends:
 | `reserved_quantity` | integer | Number of units held |
 | `expires_at` | datetime | 10-minute expiry timestamp (UTC) |
 | `status` | enum | `active`, `completed`, `expired` |
+| `effective_price` | decimal(12,2) | Price after discount resolved at reservation hold time (nullable) |
+| `promotion_id` | UUID | The applied promotion ID (nullable) |
 
 #### 4.4 Order
 
@@ -199,6 +202,51 @@ Audit log for every payment attempt tied to a reservation. Separate from `Order`
 | `failure_reason` | string | Human-readable failure description (populated on failure) |
 | `created_at` | datetime | ISO 8601 creation timestamp |
 | `updated_at` | datetime | ISO 8601 last-updated timestamp |
+
+
+#### 4.10 Promotion *(Spec #19)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `title` | string | Promotion name/title |
+| `description` | string | Detailed explanation of the offer (nullable) |
+| `discount_type` | enum | `percentage` or `flat_amount` |
+| `discount_value` | decimal(10,2) | Discount value (percentage or flat amount in rupees) |
+| `max_discount_cap` | decimal(10,2) | Max discount cap (nullable) |
+| `min_order_value` | decimal(10,2) | Minimum order value needed (nullable) |
+| `banner_image_url` | string | Image link for carousels (nullable) |
+| `starts_at` | datetime | ISO 8601 promotion start timestamp |
+| `ends_at` | datetime | ISO 8601 promotion end timestamp (nullable) |
+| `is_active` | boolean | Flag enabling/disabling the promotion |
+| `created_by` | UUID | Manager who created the promotion |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+
+#### 4.11 PromotionItem *(Spec #19)*
+
+Defines target scope (either an entire product or a specific variant).
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `promotion_id` | UUID (FK) | Parent promotion |
+| `product_id` | UUID (FK) | Target product (nullable) |
+| `variant_id` | UUID (FK) | Target variant (nullable) |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+
+#### 4.12 PromotionBroadcast *(Spec #19)*
+
+Audit log of WhatsApp broadcast attempts to customers.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `promotion_id` | UUID (FK) | Broadcasted promotion |
+| `phone_number` | string | Target customer phone number |
+| `status` | enum | `sent` or `failed` |
+| `failure_reason` | string | Description of WhatsApp API failure (nullable) |
+| `sent_at` | datetime | ISO 8601 broadcast timestamp |
+| `sent_by` | UUID | Manager who triggered the broadcast |
 
 
 #### 4.5 PackagingJob
@@ -1514,6 +1562,117 @@ Physical store checkout flow where floor staff scans multiple items for a walk-i
 
 ---
 
+#### 5.14 Promotions & Discounts (Spec #19)
+
+Manage, link, and broadcast time-bound promotions.
+
+##### `GET /api/v1/promotions/` — List Promotions
+
+| Property | Value |
+|---|---|
+| **Auth** | `AllowAny` (public storefront) or `IsManager` (for managing) |
+| **Pagination** | Yes |
+
+**Key Behaviour:**
+- Public requests (anonymous or `customer` role) return only currently live and active promotions (`starts_at <= now <= ends_at` and `is_active = true`).
+- Manager requests bypass validity checks to return all configured promotions.
+
+##### `POST /api/v1/promotions/` — Create Promotion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Request Body:**
+```json
+{
+  "title": "Diwali Special Offer",
+  "description": "20% off on premium apparel items",
+  "discount_type": "percentage",
+  "discount_value": "20.00",
+  "max_discount_cap": "500.00",
+  "min_order_value": "1000.00",
+  "starts_at": "2026-06-08T00:00:00Z",
+  "ends_at": "2026-06-15T23:59:59Z",
+  "is_active": true
+}
+```
+
+##### `GET /api/v1/promotions/<uuid:id>/` — Get Promotion Detail
+
+| Property | Value |
+|---|---|
+| **Auth** | `AllowAny` (public storefront) |
+
+##### `PATCH /api/v1/promotions/<uuid:id>/` — Update Promotion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `DELETE /api/v1/promotions/<uuid:id>/` — Delete Promotion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `GET /api/v1/promotions/active/` — Carousel Active List
+
+| Property | Value |
+|---|---|
+| **Auth** | `AllowAny` |
+
+Returns only currently live promotions sorted by their upcoming expiration times (`ends_at`), optimized for high-performance storefront banner carousels.
+
+##### `POST /api/v1/promotions/<uuid:promotion_id>/items/` — Link Product/Variant
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+Link a promotion to a product or specific variant.
+
+**Request Body:**
+```json
+{
+  "product": "uuid_of_product",
+  "variant": "uuid_of_variant_or_null"
+}
+```
+
+##### `DELETE /api/v1/promotions/<uuid:promotion_id>/items/<uuid:item_id>/` — Unlink Product/Variant
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `POST /api/v1/promotions/<uuid:id>/share/whatsapp/` — Broadcast Promotion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+Triggers an asynchronous WhatsApp CTA message broadcast to a customer phone number list.
+
+**Request Body:**
+```json
+{
+  "phone_numbers": ["919876543210", "918765432109"],
+  "message_override": "Custom broadcast greeting message",
+  "store_url": "https://dwarikas.com/shop"
+}
+```
+
+**Response (200):**
+```json
+{
+  "promotion_id": "<uuid>",
+  "total_sent": 2,
+  "total_failed": 0
+}
+```
+
+---
 
 ### 6. Standard Error Response Format
 
@@ -1578,6 +1737,7 @@ Some endpoints include additional context fields:
 | #16 | Security Hardening & Rate Limiting | `health/`, `auth/logout/` |
 | #17 | Payment Gateway (Razorpay) | `payments/create-order/`, `payments/verify/`, `payments/webhook/`, `payments/refund/`, `payments/status/<id>/` |
 | #18 | POS Cash Sales & In-Store Billing | `pos/cart/`, `pos/cart/<id>/`, `pos/cart/<id>/items/`, `pos/cart/<id>/confirm/`, `pos/bill/<order_id>/` |
+| #19 | Promotions & Discounts | `promotions/`, `promotions/<id>/`, `promotions/active/`, `promotions/<id>/items/`, `promotions/<id>/share/whatsapp/` |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
 
  
@@ -1658,6 +1818,17 @@ POST    /api/v1/payments/verify/                     → Step 2: Verify HMAC sig
 POST    /api/v1/payments/webhook/                    → Razorpay async webhook (payment.captured / failed / refund.created)
 POST    /api/v1/payments/refund/                     → Issue refund + reverse stock (Staff/Manager only)
 GET     /api/v1/payments/status/<uuid:order_id>/     → Payment status for an order
+
+# ── Promotions & Discounts (Completed) ──────────────────────────────────
+GET     /api/v1/promotions/                                → List promotions (storefront/public or manager list)
+POST    /api/v1/promotions/                                → Create promotion (Manager only)
+GET     /api/v1/promotions/<uuid:id>/                      → Get promotion details (public)
+PATCH   /api/v1/promotions/<uuid:id>/                      → Update promotion details (Manager only)
+DELETE  /api/v1/promotions/<uuid:id>/                      → Delete promotion (Manager only)
+GET     /api/v1/promotions/active/                         → Get active promotions list for storefront banner
+POST    /api/v1/promotions/<uuid:promotion_id>/items/      → Link product/variant to promotion (Manager only)
+DELETE  /api/v1/promotions/<uuid:promotion_id>/items/<uuid:item_id>/ → Unlink product/variant (Manager only)
+POST    /api/v1/promotions/<uuid:id>/share/whatsapp/       → Share promotion via WhatsApp broadcast (Manager only)
 
 # ── External Partner & Admin API Key Gateway (Completed) ──────────────────
 POST    /api/v1/external/inventory/sync/                   → Reconcile ERP inventory stock delta

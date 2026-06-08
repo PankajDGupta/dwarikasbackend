@@ -52,7 +52,8 @@ def _compute_totals(variant, reservation):
     """Return (subtotal, gst_amount, total_inr, amount_paise) for a reservation."""
     product = variant.product
     gst_rate = product.gst_slab / 100
-    subtotal = variant.retail_price * reservation.reserved_quantity
+    price = reservation.effective_price if reservation.effective_price is not None else variant.retail_price
+    subtotal = price * reservation.reserved_quantity
     gst_amount = round(subtotal * gst_rate, 2)
     total_inr = round(subtotal + gst_amount, 2)
     amount_paise = int(total_inr * 100)

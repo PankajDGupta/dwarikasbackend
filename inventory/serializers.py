@@ -3,13 +3,25 @@ from inventory.models import Product, ProductVariant, Reservation, Order, Purcha
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    active_promotion = serializers.SerializerMethodField()
+
+    def get_active_promotion(self, obj):
+        from promotions.services import get_active_promotion_for_variant, build_active_promotions_cache
+        context = self.context
+        if context is None or not isinstance(context, dict):
+            context = {}
+            self.context = context
+        if 'promotions_cache' not in context:
+            context['promotions_cache'] = build_active_promotions_cache()
+        return get_active_promotion_for_variant(obj, active_promotions_cache=context['promotions_cache'])
+
     class Meta:
         model = ProductVariant
         fields = [
             'id', 'sku', 'barcode', 'size', 'color',
             'stock_quantity', 'retail_price', 'mrp',
             'weight_volume', 'net_quantity', 'unit_of_measure',
-            'created_at',
+            'created_at', 'active_promotion',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -80,8 +92,8 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reservation
-        fields = ['id', 'variant', 'reserved_quantity', 'expires_at', 'status']
-        read_only_fields = ['id', 'expires_at', 'status']
+        fields = ['id', 'variant', 'reserved_quantity', 'expires_at', 'status', 'effective_price', 'promotion_id']
+        read_only_fields = ['id', 'expires_at', 'status', 'effective_price', 'promotion_id']
 
 
 class OrderSerializer(serializers.ModelSerializer):

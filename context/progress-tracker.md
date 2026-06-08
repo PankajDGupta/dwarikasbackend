@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #18: POS Cash Sales & In-Store Bill Generation — **Complete**
+- Spec #19: Promotions & Discounts — **Complete**
  
 ## Current Goal
  
-- Implement Promotions & Discounts (Spec #19)
+- Implement Coupon Code Creation & Application (Spec #20)
 
 
 
@@ -217,6 +217,16 @@ Update this file after every meaningful implementation change.
   - Added 15 comprehensive unit and integration test cases covering RBAC, upsert, ATP, cash, transaction boundaries, snapshots, and reprints.
   - **Completed:** 2026-06-08T23:35:00+05:30
 
+- ✅ Spec #19 - Promotions & Discounts (`promotions/`)
+  - Created `promotions/` Django application and registered unmanaged models (`Promotion`, `PromotionItem`, `PromotionBroadcast`).
+  - Added state-only migrations `0001_initial` and `0006_reservation_promotions_fields`.
+  - Implemented promotion engine resolver `get_active_promotion_for_variant` to find the best discount (percentage or flat amount).
+  - Optimized catalog serialization with `build_active_promotions_cache` in the serializer context, reducing variant query overhead to exactly 1 database query (overall 4 database queries on catalog list).
+  - Integrated promotional pricing calculation into checkout reservation holds, order confirmations, and Razorpay payment order totals.
+  - Implemented WhatsApp marketing broadcaster to send CTA messages to target customers and log delivery results in `promotion_broadcasts`.
+  - Built comprehensive unit/integration test suite covering CRUD, filters, active carousels, checkout holds, payment totals, and broadcast logs.
+  - **Completed:** 2026-06-08T23:45:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -239,7 +249,7 @@ Update this file after every meaningful implementation change.
 | 16 | Security Hardening & Rate Limiting | `api/` | ✅ Complete |
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | ✅ Complete |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | ✅ Complete |
-| 19 | Promotions & Discounts | `promotions/` | 🔲 Not started — spec written 2026-06-06 |
+| 19 | Promotions & Discounts | `promotions/` | ✅ Complete |
 | 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
@@ -249,10 +259,7 @@ Update this file after every meaningful implementation change.
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #19 — Promotions & Discounts.
-
-
-
+**Next immediate step:** Execute Spec #20 — Coupon Code Creation & Application.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

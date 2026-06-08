@@ -308,7 +308,8 @@ class ProductCatalogAPITests(TestCase):
         # 1. count query (pagination)
         # 2. products fetch query
         # 3. variants prefetch query
-        with self.assertNumQueries(3):
+        # 4. promotions resolution query (Spec #19)
+        with self.assertNumQueries(4):
             response = self.client.get(url)
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             # Evaluate all items in paginated results list to trigger lazy evaluations

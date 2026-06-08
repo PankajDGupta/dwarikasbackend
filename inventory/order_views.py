@@ -122,7 +122,7 @@ class OrderConfirmView(APIView):
 
                 # ── Step 5: Compute GST and log the order ────────────────────────
                 variant.refresh_from_db()  # Get updated stock
-                unit_price = variant.retail_price
+                unit_price = reservation.effective_price if reservation.effective_price is not None else variant.retail_price
                 qty = reservation.reserved_quantity
                 product = variant.product
                 gst_rate = product.gst_slab / 100

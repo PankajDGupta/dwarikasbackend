@@ -217,6 +217,15 @@ class Reservation(models.Model):
     reserved_quantity = models.IntegerField()
     expires_at = models.DateTimeField()
     status = models.TextField(choices=STATUS_CHOICES, default='active')
+    effective_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    promotion = models.ForeignKey(
+        'promotions.Promotion',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='promotion_id',
+        related_name='reservations',
+    )
 
     class Meta:
         managed = False
