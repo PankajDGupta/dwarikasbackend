@@ -92,8 +92,14 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reservation
-        fields = ['id', 'variant', 'reserved_quantity', 'expires_at', 'status', 'effective_price', 'promotion_id']
-        read_only_fields = ['id', 'expires_at', 'status', 'effective_price', 'promotion_id']
+        fields = [
+            'id', 'variant', 'reserved_quantity', 'expires_at', 'status',
+            'effective_price', 'promotion_id', 'coupon_id', 'coupon_discount', 'final_price'
+        ]
+        read_only_fields = [
+            'id', 'expires_at', 'status', 'effective_price', 'promotion_id',
+            'coupon_id', 'coupon_discount', 'final_price'
+        ]
 
 
 class OrderSerializer(serializers.ModelSerializer):

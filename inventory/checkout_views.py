@@ -212,6 +212,12 @@ class ReservationReleaseView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        reservation.status = 'expired'
-        reservation.save(update_fields=['status'])
+        with transaction.atomic():
+            reservation.status = 'expired'
+            reservation.save(update_fields=['status'])
+            from coupons.models import CouponRedemption
+            CouponRedemption.objects.filter(
+                reservation_id=reservation_id,
+                order__isnull=True
+            ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

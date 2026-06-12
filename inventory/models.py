@@ -226,6 +226,16 @@ class Reservation(models.Model):
         db_column='promotion_id',
         related_name='reservations',
     )
+    coupon = models.ForeignKey(
+        'coupons.Coupon',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='coupon_id',
+        related_name='reservations',
+    )
+    coupon_discount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    final_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
     class Meta:
         managed = False

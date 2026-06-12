@@ -168,6 +168,10 @@ All list views support these query-parameter backends:
 | `status` | enum | `active`, `completed`, `expired` |
 | `effective_price` | decimal(12,2) | Price after discount resolved at reservation hold time (nullable) |
 | `promotion_id` | UUID | The applied promotion ID (nullable) |
+| `coupon_id` | UUID | The applied coupon ID (nullable) |
+| `coupon_discount` | decimal(12,2) | Total coupon discount amount applied to the reservation (nullable) |
+| `final_price` | decimal(12,2) | Total final price after promotion and coupon discounts (nullable) |
+
 
 #### 4.4 Order
 
@@ -306,7 +310,41 @@ Audit log of WhatsApp broadcast attempts to customers.
 | `confidence_score` | decimal(4,3) | OCR confidence (0.000–1.000) |
 | `needs_review` | boolean | Flagged for human review if low confidence |
 
+#### 4.13 Coupon *(Spec #20)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `code` | string | Alphanumeric coupon code (uppercase) |
+| `description` | string | Detailed explanation of the coupon (nullable) |
+| `discount_type` | enum | `percentage` or `flat_amount` |
+| `discount_value` | decimal(10,2) | Discount value (percentage or flat amount in rupees) |
+| `max_discount_cap` | decimal(10,2) | Max discount cap (nullable) |
+| `min_order_value` | decimal(10,2) | Minimum order value needed (nullable) |
+| `max_uses` | integer | Maximum times this coupon can be redeemed globally (nullable) |
+| `uses_per_user` | integer | Max uses per individual user (default: 1) |
+| `specific_user_id` | UUID | Specific user user_id if restricted to one customer (nullable) |
+| `is_active` | boolean | Flag enabling/disabling the coupon |
+| `valid_from` | datetime | ISO 8601 coupon start timestamp |
+| `valid_until` | datetime | ISO 8601 coupon end timestamp (nullable) |
+| `created_by` | UUID | Manager who created the coupon |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+| `source` | enum | `manual`, `gaming_reward`, `referral` |
+
+#### 4.14 CouponRedemption *(Spec #20)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `coupon_id` | UUID (FK) | Redeemed coupon |
+| `user_id` | UUID | User who redeemed the coupon |
+| `order_id` | UUID (FK) | Order associated with the redemption (nullable) |
+| `reservation_id` | UUID (FK) | Reservation associated with the redemption (nullable) |
+| `discount_applied` | decimal(12,2) | Final calculated discount amount |
+| `redeemed_at` | datetime | ISO 8601 redemption timestamp |
+
 ---
+
 
 ### 5. API Endpoints
 
@@ -1674,6 +1712,121 @@ Triggers an asynchronous WhatsApp CTA message broadcast to a customer phone numb
 
 ---
 
+#### 5.16 Coupon Code Creation & Application (Spec #20)
+
+##### `GET /api/v1/coupons/` — List Coupons
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `POST /api/v1/coupons/` — Create Coupon
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Request Body:**
+```json
+{
+  "code": "WELCOME100",
+  "description": "Welcome discount of flat Rs 100",
+  "discount_type": "flat_amount",
+  "discount_value": "100.00",
+  "max_discount_cap": null,
+  "min_order_value": "500.00",
+  "max_uses": 100,
+  "uses_per_user": 1,
+  "specific_user_id": null,
+  "is_active": true,
+  "valid_from": "2026-06-12T12:00:00Z",
+  "valid_until": "2026-06-30T23:59:59Z",
+  "source": "manual"
+}
+```
+
+##### `GET /api/v1/coupons/<uuid:id>/` — Coupon Detail
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `PATCH /api/v1/coupons/<uuid:id>/` — Update Coupon
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `DELETE /api/v1/coupons/<uuid:id>/` — Delete Coupon
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `GET /api/v1/coupons/validate/<str:code>/?reservation_id=<uuid>` — Validate Coupon
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Checks if a coupon code is valid for the calling user, calculating the prospective discount and final price against a given `reservation_id` (optional). Does not reserve or apply the coupon.
+
+**Response (200):**
+```json
+{
+  "valid": true,
+  "code": "WELCOME100",
+  "discount_type": "flat_amount",
+  "discount_value": "100.00",
+  "discount_amount": "100.00",
+  "final_total": "400.00"
+}
+```
+
+##### `POST /api/v1/checkout/apply-coupon/` — Apply Coupon to Reservation
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Validates the coupon code and atomically applies it to the active reservation, creating a pending `CouponRedemption` (with `order_id` as `NULL`) to reserve the usage limit.
+
+**Request Body:**
+```json
+{
+  "reservation_id": "uuid_of_reservation",
+  "coupon_code": "WELCOME100"
+}
+```
+
+**Response (200):**
+```json
+{
+  "reservation_id": "uuid_of_reservation",
+  "coupon_code": "WELCOME100",
+  "discount_amount": "100.00",
+  "final_total": "400.00",
+  "message": "Coupon applied successfully."
+}
+```
+
+##### `DELETE /api/v1/checkout/remove-coupon/<uuid:reservation_id>/` — Remove Coupon from Reservation
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Removes the applied coupon from the active reservation and deletes the pending `CouponRedemption` record, releasing the usage count.
+
+**Response (200):**
+```json
+{
+  "message": "Coupon removed successfully."
+}
+```
+
+---
+
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -1738,6 +1891,7 @@ Some endpoints include additional context fields:
 | #17 | Payment Gateway (Razorpay) | `payments/create-order/`, `payments/verify/`, `payments/webhook/`, `payments/refund/`, `payments/status/<id>/` |
 | #18 | POS Cash Sales & In-Store Billing | `pos/cart/`, `pos/cart/<id>/`, `pos/cart/<id>/items/`, `pos/cart/<id>/confirm/`, `pos/bill/<order_id>/` |
 | #19 | Promotions & Discounts | `promotions/`, `promotions/<id>/`, `promotions/active/`, `promotions/<id>/items/`, `promotions/<id>/share/whatsapp/` |
+| #20 | Coupon Code Creation & Application | `coupons/`, `coupons/<id>/`, `coupons/validate/<code>/`, `checkout/apply-coupon/`, `checkout/remove-coupon/<reservation_id>/` |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
 
  
@@ -1829,6 +1983,16 @@ GET     /api/v1/promotions/active/                         → Get active promot
 POST    /api/v1/promotions/<uuid:promotion_id>/items/      → Link product/variant to promotion (Manager only)
 DELETE  /api/v1/promotions/<uuid:promotion_id>/items/<uuid:item_id>/ → Unlink product/variant (Manager only)
 POST    /api/v1/promotions/<uuid:id>/share/whatsapp/       → Share promotion via WhatsApp broadcast (Manager only)
+
+# ── Coupon Code Creation & Application (Completed) ─────────────────────────
+GET     /api/v1/coupons/                                   → List coupons (Manager only)
+POST    /api/v1/coupons/                                   → Create coupon (Manager only)
+GET     /api/v1/coupons/<uuid:id>/                         → Coupon detail (Manager only)
+PATCH   /api/v1/coupons/<uuid:id>/                         → Update coupon (Manager only)
+DELETE  /api/v1/coupons/<uuid:id>/                         → Delete coupon (Manager only)
+GET     /api/v1/coupons/validate/<str:code>/               → Validate coupon for caller (preview discount)
+POST    /api/v1/checkout/apply-coupon/                     → Validate and apply coupon to active reservation
+DELETE  /api/v1/checkout/remove-coupon/<uuid:res_id>/      → Remove applied coupon from active reservation
 
 # ── External Partner & Admin API Key Gateway (Completed) ──────────────────
 POST    /api/v1/external/inventory/sync/                   → Reconcile ERP inventory stock delta

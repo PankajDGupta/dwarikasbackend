@@ -18,7 +18,7 @@ class ManagedModelTestRunner(DiscoverRunner):
     """
 
     # Apps whose unmanaged models should be promoted to managed during tests
-    MANAGED_APPS = {'inventory', 'payments', 'pos', 'promotions'}
+    MANAGED_APPS = {'inventory', 'payments', 'pos', 'promotions', 'coupons'}
 
     def setup_databases(self, **kwargs):
         import os

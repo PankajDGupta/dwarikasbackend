@@ -52,7 +52,10 @@ def _compute_totals(variant, reservation):
     """Return (subtotal, gst_amount, total_inr, amount_paise) for a reservation."""
     product = variant.product
     gst_rate = product.gst_slab / 100
-    price = reservation.effective_price if reservation.effective_price is not None else variant.retail_price
+    if getattr(reservation, 'coupon_id', None) and reservation.final_price is not None:
+        price = reservation.final_price
+    else:
+        price = reservation.effective_price if reservation.effective_price is not None else variant.retail_price
     subtotal = price * reservation.reserved_quantity
     gst_amount = round(subtotal * gst_rate, 2)
     total_inr = round(subtotal + gst_amount, 2)
@@ -342,6 +345,14 @@ class VerifyPaymentView(APIView):
                     payment_status='completed',
                 )
 
+                if getattr(reservation, 'coupon_id', None):
+                    from coupons.models import CouponRedemption
+                    CouponRedemption.objects.filter(
+                        reservation_id=reservation.id,
+                        user_id=user_id,
+                        order__isnull=True
+                    ).update(order=order)
+
                 # Mark transaction as paid
                 txn.razorpay_payment_id = razorpay_payment_id
                 txn.razorpay_signature = razorpay_signature
@@ -498,6 +509,14 @@ class RazorpayWebhookView(APIView):
                     payment_method='online',
                     payment_status='completed',
                 )
+
+                if getattr(reservation, 'coupon_id', None):
+                    from coupons.models import CouponRedemption
+                    CouponRedemption.objects.filter(
+                        reservation_id=reservation.id,
+                        user_id=txn.user_id,
+                        order__isnull=True
+                    ).update(order=order)
 
                 txn.razorpay_payment_id = rp_payment_id
                 txn.order_id = order.id

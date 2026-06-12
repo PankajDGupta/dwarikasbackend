@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #19: Promotions & Discounts — **Complete**
+- Spec #20: Coupon Code Creation & Application — **Complete**
  
 ## Current Goal
  
-- Implement Coupon Code Creation & Application (Spec #20)
+- Implement Gaming Engine Integration & Coupon Rewards (Spec #21)
 
 
 
@@ -227,6 +227,15 @@ Update this file after every meaningful implementation change.
   - Built comprehensive unit/integration test suite covering CRUD, filters, active carousels, checkout holds, payment totals, and broadcast logs.
   - **Completed:** 2026-06-08T23:45:00+05:30
 
+- ✅ Spec #20 - Coupon Code Creation & Application (`coupons/`)
+  - Created `coupons/` Django application and registered unmanaged models (`Coupon`, `CouponRedemption`).
+  - Implemented coupons DDL SQL snippet and applied migrations atomically on local Supabase PostgreSQL database.
+  - Developed coupons service layer (`validate_coupon`, `apply_coupon_to_reservation`) with row-level locks (`select_for_update`) to prevent concurrent usage limits bypass.
+  - Implemented REST APIs for listing, creating, deleting, validating, applying, and removing coupons from active checkout holds.
+  - Integrated coupons logic into checkout reservations, order confirmations, and payments views to dynamically calculate final prices and secure usage limits.
+  - Added 9 comprehensive unit and integration tests (validations, stacking constraints, user limits, payment sync, and concurrent race-condition prevention) with 100% test pass rate.
+  - **Completed:** 2026-06-12T23:40:00+05:30
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -250,7 +259,7 @@ Update this file after every meaningful implementation change.
 | 17 | Payment Gateway Integration (Razorpay) | `payments/` | ✅ Complete |
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | ✅ Complete |
 | 19 | Promotions & Discounts | `promotions/` | ✅ Complete |
-| 20 | Coupon Code Creation & Application | `coupons/` | 🔲 Not started — spec written 2026-06-06 |
+| 20 | Coupon Code Creation & Application | `coupons/` | ✅ Complete |
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | 🔲 Not started — spec written 2026-06-07 |
@@ -259,7 +268,7 @@ Update this file after every meaningful implementation change.
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #20 — Coupon Code Creation & Application.
+**Next immediate step:** Execute Spec #21 — Gaming Engine Integration & Coupon Rewards.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

@@ -122,7 +122,13 @@ class OrderConfirmView(APIView):
 
                 # ── Step 5: Compute GST and log the order ────────────────────────
                 variant.refresh_from_db()  # Get updated stock
-                unit_price = reservation.effective_price if reservation.effective_price is not None else variant.retail_price
+                if reservation.coupon_id and reservation.final_price is not None:
+                    unit_price = reservation.final_price
+                elif reservation.effective_price is not None:
+                    unit_price = reservation.effective_price
+                else:
+                    unit_price = variant.retail_price
+                
                 qty = reservation.reserved_quantity
                 product = variant.product
                 gst_rate = product.gst_slab / 100
@@ -138,6 +144,14 @@ class OrderConfirmView(APIView):
                     payment_method=payment_method,
                     payment_status='completed',
                 )
+
+                if reservation.coupon_id:
+                    from coupons.models import CouponRedemption
+                    CouponRedemption.objects.filter(
+                        reservation_id=reservation.id,
+                        user_id=user_id,
+                        order__isnull=True
+                    ).update(order=order)
 
                 return Response(
                     {

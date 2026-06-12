@@ -20,5 +20,6 @@ urlpatterns = [
     path('api/v1/', include('payments.urls')),    # Spec #17 — Razorpay Payment Gateway
     path('api/v1/', include('pos.urls')),         # Spec #18 — POS Cash Sales & In-Store Bill Generation
     path('api/v1/', include('promotions.urls')),  # Spec #19 — Promotions & Discounts
+    path('api/v1/', include('coupons.urls')),     # Spec #20 — Coupon Code Creation & Application
 ]
 
