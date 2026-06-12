@@ -1,20 +1,68 @@
-# Spec 21 — Gaming Engine Integration & Coupon Rewards
+# Spec 21 — Gaming Engine Integration & Coupon Rewards (Unity Mobile — Android/iOS)
 
 ## Goal
 
-Integrate Dwarikas with an external gaming engine that runs loyalty games (spin-the-wheel, scratch cards, quiz challenges, etc.). When a user wins a game, the gaming engine notifies the Dwarikas backend via a secure webhook. The backend then auto-generates a single-use coupon (via the Coupon service from Spec 20), stores it against the user's account, and optionally delivers it via WhatsApp (Spec 14). Users can then view their reward coupons and redeem them at checkout.
+Integrate Dwarikas with a **Unity-built mobile game** (Android/iOS) for loyalty gamification.
+The game authenticates players using the **same Supabase project** as the Dwarikas app — the
+player identity is the same user in both systems. When a user wins in the game, Unity calls a
+Supabase-JWT-authenticated endpoint on the Dwarikas backend, which auto-generates a single-use
+coupon (via Spec 20), stores it against the user's account, and optionally delivers it via
+WhatsApp (Spec 14). Users can view and redeem their reward coupons at checkout.
 
 ---
 
 ## Business Context
 
-Gamification is a proven customer engagement strategy. By tying the gaming experience directly to the shopping journey, Dwarikas creates a flywheel:
+Gamification creates a customer engagement flywheel:
 
-1. Customer shops → earns game plays
-2. Customer wins game → gets a reward coupon
-3. Coupon drives next purchase → repeat
+1. Customer shops → earns game plays (1 per completed order)
+2. Customer wins the game → gets a reward coupon on their Dwarikas account
+3. Coupon drives the next purchase → repeat
 
-The backend acts as the **trusted authority** for reward issuance. The gaming engine (an external SaaS or custom app) is not trusted to create or modify coupons directly — it only signals a win event. The Dwarikas backend generates the actual coupon value according to configurable reward tiers.
+The Unity game is a **first-party app** developed and published by Dwarikas. It uses the same
+Supabase Auth project, so the user identity is cryptographically verified — the backend does not
+need to trust any externally asserted `user_id`.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   SUPABASE AUTH (Shared)                         │
+│     One auth system — Dwarikas App, Unity Game, Backend          │
+└────────────┬────────────────────────────┬───────────────────────┘
+             │                            │
+             ▼                            ▼
+  ┌──────────────────┐         ┌─────────────────────────┐
+  │  Dwarikas App    │         │  Unity Mobile Game      │
+  │  (Shopping)      │         │  (Android / iOS)        │
+  │                  │         │                          │
+  │  Same email &    │         │  Login with same         │
+  │  password        │         │  email & password        │
+  │  → Supabase JWT  │         │  → Supabase JWT          │
+  └──────────────────┘         └──────────┬───────────────┘
+                                          │
+                          ┌───────────────┴──────────────────┐
+                          │                                   │
+                          ▼                                   ▼
+             GET /gaming/earn/                POST /gaming/record-play/
+             (how many plays left?)           (authorise a play + on win
+                                              claim the coupon)
+                          │                                   │
+                          └───────────────┬──────────────────┘
+                                          ▼
+                               ┌──────────────────────┐
+                               │  DWARIKAS BACKEND    │
+                               │  (Django on Cloud Run)│
+                               │                       │
+                               │  Validates JWT ✅     │
+                               │  Enforces play quota  │
+                               │  Matches reward tier  │
+                               │  Issues coupon        │
+                               │  Sends WhatsApp       │
+                               └──────────────────────┘
+```
 
 ---
 
@@ -22,10 +70,13 @@ The backend acts as the **trusted authority** for reward issuance. The gaming en
 
 | Spec | Impact |
 |---|---|
-| **Spec 20** (Coupon Codes) | `create_gaming_reward_coupon()` service function is called to generate the reward coupon |
-| **Spec 14** (WhatsApp Commerce Engine) | Coupon delivery via WhatsApp message (optional, configurable per reward tier) |
-| **Spec 03** (Authentication) | Gaming engine webhook uses HMAC-SHA256 shared secret, not Supabase JWT |
-| **Spec 04** (Database Models) | New `GameReward` and `RewardTier` models |
+| **Spec 20** (Coupon Codes) | `create_gaming_reward_coupon()` service is called on a win |
+| **Spec 14** (WhatsApp Commerce Engine) | Coupon delivery via WhatsApp (optional per tier) |
+| **Spec 03** (Authentication) | Unity uses the same Supabase JWT — validated by existing middleware |
+| **Spec 04** (Database Models) | New `GamePlay`, `RewardTier`, `GameReward` models |
+
+> **No external webhook.** There is no HMAC shared secret and no server-to-server webhook.
+> The Unity game client calls the Dwarikas backend directly with the player's Supabase JWT.
 
 ---
 
@@ -37,13 +88,34 @@ New Django app: `gaming/`
 
 | Method | Path | Actor | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/gaming/webhook/` | External Gaming Engine | Secure webhook: signals a win event and triggers coupon issuance |
+| `GET` | `/api/v1/gaming/earn/` | Authenticated Customer | Returns plays earned (from order history) and plays remaining |
+| `POST` | `/api/v1/gaming/record-play/` | Authenticated Customer (Unity) | Authorises one play at game start; records a win and issues a coupon if `won=true` |
 | `GET` | `/api/v1/gaming/rewards/` | Authenticated Customer | Lists all reward coupons earned by the calling user |
-| `GET` | `/api/v1/gaming/rewards/<uuid:id>/` | Authenticated Customer | Single reward detail (includes coupon code) |
+| `GET` | `/api/v1/gaming/rewards/<uuid:id>/` | Authenticated Customer | Single reward detail including coupon code |
 | `POST` | `/api/v1/gaming/reward-tiers/` | Manager | Create a reward tier configuration |
 | `GET` | `/api/v1/gaming/reward-tiers/` | Manager | List all reward tiers |
 | `PATCH` | `/api/v1/gaming/reward-tiers/<uuid:id>/` | Manager | Update a reward tier |
-| `GET` | `/api/v1/gaming/earn/` | Authenticated Customer | Returns how many game plays the calling user has earned (based on their order history) |
+
+---
+
+## Play Quota Model
+
+```
+plays_earned  = COUNT of completed orders for the user  (server-computed)
+plays_used    = COUNT of GamePlay records for the user   (server-tracked)
+plays_remaining = plays_earned - plays_used
+```
+
+Unity calls `GET /gaming/earn/` before starting the game to show the player how many plays
+they have. Before each spin/card/quiz, Unity calls `POST /gaming/record-play/` which:
+
+1. Validates `plays_remaining > 0` — if not, returns HTTP 403.
+2. Atomically creates a `GamePlay` record (consuming one play).
+3. If `won=true` in the payload, also creates a `GameReward` and issues a coupon.
+4. Returns the coupon code if a win was recorded.
+
+This two-step design (authorise-then-play) prevents quota bypass: the server
+allocates the play slot before the game outcome is decided client-side.
 
 ---
 
@@ -51,13 +123,13 @@ New Django app: `gaming/`
 
 ### `RewardTier`
 
-Managers configure how wins translate into coupon values. Multiple tiers allow different rewards for different win levels (e.g., "Grand Prize", "Runner Up", "Participation").
+Managers configure how wins translate into coupon values.
 
 ```
 id                  UUID        PK — auto
 name                TEXT        e.g., "Grand Prize", "Silver", "Bronze"
-game_type           TEXT        e.g., "spin_wheel", "scratch_card", "quiz" — from gaming engine
-win_level           TEXT        Label from gaming engine (e.g., "jackpot", "level_2", "any")
+game_type           TEXT        e.g., "spin_wheel", "scratch_card", "quiz"
+win_level           TEXT        Label from Unity (e.g., "jackpot", "level_2", "any")
 discount_type       TEXT        'percentage' | 'flat_amount'
 discount_value      DECIMAL(10,2) Value of the coupon reward
 max_discount_cap    DECIMAL(10,2) Optional — cap for percentage rewards
@@ -68,21 +140,35 @@ is_active           BOOLEAN     Default: true
 created_at          TIMESTAMPTZ Auto
 ```
 
+### `GamePlay`
+
+One record per play consumed. Tracks quota usage regardless of win/loss.
+
+```
+id                  UUID        PK — auto
+user_id             UUID        Supabase user who played
+game_session_id     TEXT        Unique ID from Unity (GUID generated client-side)
+game_type           TEXT        Type of game (e.g., "spin_wheel")
+played_at           TIMESTAMPTZ Auto (created_at)
+```
+
+`game_session_id` has a UNIQUE constraint — prevents the same session being recorded twice
+(idempotency if Unity retries on network failure).
+
 ### `GameReward`
 
-Immutable record of every game win event and the coupon issued.
+One record per win event. Immutable audit log linking a play to its coupon.
 
 ```
 id                  UUID        PK — auto
 user_id             UUID        Supabase user who won
-game_session_id     TEXT        Unique ID from the gaming engine (for deduplication)
-game_type           TEXT        Type of game (e.g., "spin_wheel")
-win_level           TEXT        Win level from the gaming engine payload
+game_play_id        UUID (FK)   → GamePlay — the play session that resulted in this win
+game_type           TEXT        Type of game
+win_level           TEXT        Win level sent by Unity
 reward_tier_id      UUID (FK)   → RewardTier — which tier was matched
 coupon_id           UUID (FK)   → Coupon — the generated coupon
 whatsapp_sent       BOOLEAN     Whether WhatsApp delivery was attempted
 whatsapp_delivered  BOOLEAN     Nullable — delivery confirmation
-raw_payload         JSONB       Full webhook payload for audit
 created_at          TIMESTAMPTZ Auto
 ```
 
@@ -135,10 +221,37 @@ class RewardTier(models.Model):
         ordering = ['game_type', 'win_level']
 
 
-class GameReward(models.Model):
+class GamePlay(models.Model):
+    """
+    One record per play consumed by a user.
+    Created atomically when the user starts a spin/card/quiz.
+    Tracks quota regardless of win or loss.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
-    game_session_id = models.TextField(unique=True)  # Deduplication key
+    game_session_id = models.TextField(unique=True)   # Unity GUID — deduplication key
+    game_type = models.TextField()
+    played_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'game_plays'
+        ordering = ['-played_at']
+
+
+class GameReward(models.Model):
+    """
+    Immutable record of every win event and the coupon issued.
+    Created only when won=True in the record-play payload.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField()
+    game_play = models.OneToOneField(
+        GamePlay,
+        on_delete=models.CASCADE,
+        db_column='game_play_id',
+        related_name='reward',
+    )
     game_type = models.TextField()
     win_level = models.TextField()
     reward_tier = models.ForeignKey(
@@ -157,7 +270,6 @@ class GameReward(models.Model):
     )
     whatsapp_sent = models.BooleanField(default=False)
     whatsapp_delivered = models.BooleanField(null=True, blank=True)
-    raw_payload = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -168,28 +280,33 @@ class GameReward(models.Model):
 
 ---
 
-### `gaming/services.py` — Reward resolution and coupon issuance
+### `gaming/services.py`
 
 ```python
 """
-Gaming engine reward service.
-Handles win event processing, reward tier matching, coupon generation, and WhatsApp delivery.
+Gaming service layer.
+Handles play quota enforcement, reward tier matching, coupon generation, and WhatsApp delivery.
 """
 import uuid
 import logging
 from django.db import transaction
-from gaming.models import RewardTier, GameReward
+from gaming.models import RewardTier, GamePlay, GameReward
 from coupons.services import create_gaming_reward_coupon
 
 logger = logging.getLogger(__name__)
 
 
+def get_plays_remaining(user_id: uuid.UUID, plays_earned: int) -> int:
+    """Returns how many plays the user still has available."""
+    plays_used = GamePlay.objects.filter(user_id=user_id).count()
+    return max(0, plays_earned - plays_used)
+
+
 def find_matching_tier(game_type: str, win_level: str) -> RewardTier | None:
     """
-    Finds the best matching RewardTier for a game win event.
+    Finds the best matching RewardTier for a win event.
     Exact win_level match takes priority over 'any' wildcard.
     """
-    # Try exact match first
     tier = RewardTier.objects.filter(
         game_type=game_type,
         win_level=win_level,
@@ -197,7 +314,6 @@ def find_matching_tier(game_type: str, win_level: str) -> RewardTier | None:
     ).first()
 
     if not tier:
-        # Fall back to wildcard tier
         tier = RewardTier.objects.filter(
             game_type=game_type,
             win_level='any',
@@ -208,76 +324,119 @@ def find_matching_tier(game_type: str, win_level: str) -> RewardTier | None:
 
 
 @transaction.atomic
-def process_win_event(
+def record_play(
     user_id: uuid.UUID,
     game_session_id: str,
     game_type: str,
-    win_level: str,
-    raw_payload: dict,
-    system_user_id: uuid.UUID,  # UUID of the system/manager account used as coupon creator
-) -> GameReward | None:
+    plays_earned: int,
+    won: bool,
+    win_level: str | None,
+    system_user_id: uuid.UUID,
+) -> dict:
     """
-    Main entry point for processing a win event from the gaming engine.
+    Main entry point called by the Unity game on every play.
 
-    1. Checks for duplicate game_session_id (idempotency).
-    2. Finds the matching RewardTier.
-    3. Generates a coupon via the Coupon service.
-    4. Creates a GameReward record.
-    5. Sends WhatsApp notification if configured.
+    Steps:
+    1. Idempotency check — if game_session_id already exists, return existing result.
+    2. Validate plays_remaining > 0.
+    3. Create GamePlay record (consumes one play).
+    4. If won=True: find tier, create coupon, create GameReward, send WhatsApp.
 
-    Returns the created GameReward, or the existing one if already processed.
+    Returns a dict with keys:
+        play_id       — UUID of the GamePlay record
+        plays_used    — updated count after this play
+        plays_remaining — updated remaining count
+        won           — bool
+        reward        — GameReward instance or None
+        coupon_code   — str or None
     """
-    # Idempotency: if this session was already processed, return existing reward
-    existing = GameReward.objects.filter(game_session_id=game_session_id).first()
-    if existing:
-        logger.info(f'Duplicate win event for session {game_session_id} — returning existing reward.')
-        return existing
+    # Idempotency: if this session was already recorded, return existing outcome
+    existing_play = GamePlay.objects.filter(game_session_id=game_session_id).first()
+    if existing_play:
+        logger.info(f'Duplicate game session {game_session_id} — returning existing result.')
+        existing_reward = getattr(existing_play, 'reward', None)
+        plays_used = GamePlay.objects.filter(user_id=user_id).count()
+        return {
+            'play_id': existing_play.id,
+            'plays_used': plays_used,
+            'plays_remaining': max(0, plays_earned - plays_used),
+            'won': existing_reward is not None,
+            'reward': existing_reward,
+            'coupon_code': existing_reward.coupon.code if existing_reward and existing_reward.coupon else None,
+        }
 
-    tier = find_matching_tier(game_type, win_level)
-    if not tier:
-        logger.warning(f'No matching RewardTier for game_type={game_type}, win_level={win_level}. No coupon issued.')
-        return None
+    # Validate play quota
+    plays_used = GamePlay.objects.filter(user_id=user_id).count()
+    plays_remaining = plays_earned - plays_used
+    if plays_remaining <= 0:
+        raise ValueError('No plays remaining for this user.')
 
-    # Generate the coupon
-    coupon = create_gaming_reward_coupon(
-        user_id=user_id,
-        reward_config={
-            'discount_type': tier.discount_type,
-            'discount_value': float(tier.discount_value),
-            'valid_days': tier.valid_days,
-            'description': tier.description or f'{tier.name} reward from gaming',
-        },
-        created_by=system_user_id,
-    )
-
-    reward = GameReward.objects.create(
+    # Consume one play
+    play = GamePlay.objects.create(
         user_id=user_id,
         game_session_id=game_session_id,
         game_type=game_type,
-        win_level=win_level,
-        reward_tier=tier,
-        coupon=coupon,
-        raw_payload=raw_payload,
     )
+    plays_used += 1
+    plays_remaining -= 1
 
-    # Send WhatsApp notification (non-blocking — failure doesn't roll back coupon issuance)
-    if tier.notify_whatsapp:
-        try:
-            _send_whatsapp_reward_notification(user_id, coupon, tier)
-            GameReward.objects.filter(id=reward.id).update(whatsapp_sent=True)
-        except Exception as exc:
-            logger.error(f'WhatsApp notification failed for reward {reward.id}: {exc}')
+    reward = None
+    coupon_code = None
 
-    return reward
+    if won:
+        if not win_level:
+            logger.warning(f'won=True but no win_level provided for session {game_session_id}.')
+        else:
+            tier = find_matching_tier(game_type, win_level)
+            if not tier:
+                logger.warning(
+                    f'No matching RewardTier for game_type={game_type}, win_level={win_level}.'
+                )
+            else:
+                coupon = create_gaming_reward_coupon(
+                    user_id=user_id,
+                    reward_config={
+                        'discount_type': tier.discount_type,
+                        'discount_value': float(tier.discount_value),
+                        'max_discount_cap': float(tier.max_discount_cap) if tier.max_discount_cap else None,
+                        'valid_days': tier.valid_days,
+                        'description': tier.description or f'{tier.name} reward from gaming',
+                    },
+                    created_by=system_user_id,
+                )
+
+                reward = GameReward.objects.create(
+                    user_id=user_id,
+                    game_play=play,
+                    game_type=game_type,
+                    win_level=win_level,
+                    reward_tier=tier,
+                    coupon=coupon,
+                )
+                coupon_code = coupon.code
+
+                # WhatsApp notification — failure does NOT roll back the coupon
+                if tier.notify_whatsapp:
+                    try:
+                        _send_whatsapp_reward_notification(user_id, coupon, tier)
+                        GameReward.objects.filter(id=reward.id).update(whatsapp_sent=True)
+                    except Exception as exc:
+                        logger.error(f'WhatsApp notification failed for reward {reward.id}: {exc}')
+
+    return {
+        'play_id': play.id,
+        'plays_used': plays_used,
+        'plays_remaining': plays_remaining,
+        'won': won and reward is not None,
+        'reward': reward,
+        'coupon_code': coupon_code,
+    }
 
 
 def _send_whatsapp_reward_notification(user_id, coupon, tier):
     """
     Sends a WhatsApp message to the user with their reward coupon code.
-    Uses the WhatsApp client from Spec 14.
-
-    NOTE: This requires the user's WhatsApp phone number to be stored in their profile.
-    If the profile has no phone number, this is a no-op.
+    No-op if the user has no phone number on their Profile.
     """
     from inventory.models import Profile
     from whatsapp.wa_client import WhatsAppClient
@@ -303,132 +462,154 @@ def _send_whatsapp_reward_notification(user_id, coupon, tier):
 
 ---
 
-### `gaming/webhook.py` — Webhook signature verification
-
-```python
-"""
-Gaming engine webhook signature verification.
-The gaming engine signs its requests with HMAC-SHA256 using a shared secret.
-"""
-import hashlib
-import hmac
-import os
-
-
-GAMING_WEBHOOK_SECRET = os.environ.get('GAMING_WEBHOOK_SECRET', '')
-
-
-def verify_gaming_webhook_signature(request_body: bytes, signature_header: str) -> bool:
-    """
-    Verifies the HMAC-SHA256 signature from the gaming engine.
-    Expected header: X-Gaming-Signature: sha256=<hex_digest>
-    Bypassed if GAMING_WEBHOOK_SECRET is not set (local dev).
-    """
-    if not GAMING_WEBHOOK_SECRET:
-        return True  # Bypass in local dev
-
-    if not signature_header or not signature_header.startswith('sha256='):
-        return False
-
-    expected = hmac.new(
-        GAMING_WEBHOOK_SECRET.encode('utf-8'),
-        request_body,
-        hashlib.sha256,
-    ).hexdigest()
-    received = signature_header[len('sha256='):]
-    return hmac.compare_digest(expected, received)
-```
-
----
-
 ### `gaming/views.py`
 
 ```python
-import json
-import os
 import uuid
-from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+from django.db import IntegrityError
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import os
 
 from api.permissions import IsManager
 from gaming.models import RewardTier, GameReward
-from gaming.serializers import RewardTierSerializer, GameRewardSerializer
-from gaming.services import process_win_event
-from gaming.webhook import verify_gaming_webhook_signature
+from gaming.serializers import RewardTierSerializer, GameRewardSerializer, RecordPlaySerializer
+from gaming.services import record_play
+from inventory.models import Order
 
-# A system-level UUID for coupons auto-created by the gaming engine
-# Should map to a dedicated system account in Supabase auth.users
+# UUID of the system/service account used as `created_by` on auto-generated coupons.
+# Should be a dedicated service account in Supabase auth.users.
 GAMING_SYSTEM_USER_ID = os.environ.get('GAMING_SYSTEM_USER_ID', '00000000-0000-0000-0000-000000000000')
 
 
-@method_decorator(csrf_exempt, name='dispatch')
-class GamingWebhookView(APIView):
+class GamePlaysEarnedView(APIView):
     """
-    POST /api/v1/gaming/webhook/
+    GET /api/v1/gaming/earn/
 
-    Receives win events from the external gaming engine.
-    Signature-verified via HMAC-SHA256 (X-Gaming-Signature header).
+    Returns how many game plays the calling user has earned based on their
+    completed order history, and how many plays they have remaining.
 
-    Expected payload:
+    Unity calls this before showing the game menu to display the play count.
+
+    Response:
     {
-        "event": "win",
-        "game_session_id": "unique-session-id",
-        "game_type": "spin_wheel",
-        "win_level": "jackpot",
-        "user_id": "<supabase-user-uuid>",
-        "metadata": {}   // optional extra data, stored in raw_payload
+        "user_id": "uuid",
+        "plays_earned": 12,
+        "plays_used": 10,
+        "plays_remaining": 2,
+        "plays_calculation": "1 play per confirmed order"
     }
     """
-    authentication_classes = []
-    permission_classes = []
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = uuid.UUID(request.user.username)
+
+        plays_earned = Order.objects.filter(
+            user_id=user_id,
+            payment_status='completed',
+        ).count()
+
+        from gaming.models import GamePlay
+        plays_used = GamePlay.objects.filter(user_id=user_id).count()
+        plays_remaining = max(0, plays_earned - plays_used)
+
+        return Response({
+            'user_id': str(user_id),
+            'plays_earned': plays_earned,
+            'plays_used': plays_used,
+            'plays_remaining': plays_remaining,
+            'plays_calculation': '1 play per confirmed order',
+        })
+
+
+class RecordPlayView(APIView):
+    """
+    POST /api/v1/gaming/record-play/
+
+    Unity calls this on EVERY play (spin, scratch, quiz).
+    - Validates the user has plays remaining.
+    - Atomically records the play (consuming one quota slot).
+    - If won=True, matches a reward tier and issues a coupon.
+
+    Request payload:
+    {
+        "game_session_id": "<unity-generated-guid>",
+        "game_type": "spin_wheel",
+        "won": true,
+        "win_level": "jackpot"   // required if won=true, omit or null if lost
+    }
+
+    Response (win):
+    {
+        "play_id": "uuid",
+        "plays_remaining": 1,
+        "won": true,
+        "coupon_code": "GAME-XXXX",
+        "coupon_discount_type": "percentage",
+        "coupon_discount_value": "20.00",
+        "coupon_valid_until": "2026-07-13"
+    }
+
+    Response (loss):
+    {
+        "play_id": "uuid",
+        "plays_remaining": 1,
+        "won": false,
+        "coupon_code": null
+    }
+
+    Error (no plays left):  HTTP 403
+    Error (bad payload):    HTTP 400
+    """
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Verify signature
-        signature = request.headers.get('X-Gaming-Signature', '')
-        if not verify_gaming_webhook_signature(request.body, signature):
-            return HttpResponse(status=401)
+        serializer = RecordPlaySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            payload = json.loads(request.body)
-        except json.JSONDecodeError:
-            return HttpResponse(status=400)
-
-        event = payload.get('event')
-        if event != 'win':
-            # Non-win events (e.g., game_started, game_ended) are acknowledged but ignored
-            return HttpResponse(status=200)
-
-        game_session_id = payload.get('game_session_id')
-        game_type = payload.get('game_type')
-        win_level = payload.get('win_level')
-        user_id_str = payload.get('user_id')
-
-        if not all([game_session_id, game_type, win_level, user_id_str]):
-            return HttpResponse(status=400)
-
-        try:
-            user_id = uuid.UUID(user_id_str)
-        except (ValueError, TypeError):
-            return HttpResponse(status=400)
-
+        user_id = uuid.UUID(request.user.username)
         system_user_id = uuid.UUID(GAMING_SYSTEM_USER_ID)
 
-        reward = process_win_event(
+        # Get current plays earned to pass into service (avoids a second DB query there)
+        plays_earned = Order.objects.filter(
             user_id=user_id,
-            game_session_id=game_session_id,
-            game_type=game_type,
-            win_level=win_level,
-            raw_payload=payload,
-            system_user_id=system_user_id,
-        )
+            payment_status='completed',
+        ).count()
 
-        # Always return 200 to the gaming engine to prevent retries
-        return HttpResponse(status=200)
+        try:
+            result = record_play(
+                user_id=user_id,
+                game_session_id=serializer.validated_data['game_session_id'],
+                game_type=serializer.validated_data['game_type'],
+                plays_earned=plays_earned,
+                won=serializer.validated_data['won'],
+                win_level=serializer.validated_data.get('win_level'),
+                system_user_id=system_user_id,
+            )
+        except ValueError as exc:
+            # No plays remaining
+            return Response({'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+        response_data = {
+            'play_id': str(result['play_id']),
+            'plays_remaining': result['plays_remaining'],
+            'won': result['won'],
+            'coupon_code': result['coupon_code'],
+        }
+
+        if result['reward'] and result['reward'].coupon:
+            coupon = result['reward'].coupon
+            response_data.update({
+                'coupon_discount_type': coupon.discount_type,
+                'coupon_discount_value': str(coupon.discount_value),
+                'coupon_valid_until': coupon.valid_until.date().isoformat() if coupon.valid_until else None,
+            })
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class UserRewardListView(generics.ListAPIView):
@@ -469,48 +650,12 @@ class RewardTierListCreateView(generics.ListCreateAPIView):
 
 class RewardTierDetailView(generics.RetrieveUpdateAPIView):
     """
-    GET /PATCH /api/v1/gaming/reward-tiers/<uuid:id>/
+    GET / PATCH /api/v1/gaming/reward-tiers/<uuid:id>/
     """
     serializer_class = RewardTierSerializer
     permission_classes = [IsManager]
     queryset = RewardTier.objects.all()
     lookup_field = 'id'
-
-
-class GamePlaysEarnedView(APIView):
-    """
-    GET /api/v1/gaming/earn/
-
-    Returns how many game plays the calling user has earned based on their order history.
-    The formula is: 1 game play per confirmed order.
-
-    The gaming engine can call this endpoint (with the user's JWT forwarded) to determine
-    how many plays to grant in the gaming interface.
-
-    Response:
-    {
-        "user_id": "uuid",
-        "total_orders": 12,
-        "plays_earned": 12,
-        "plays_calculation": "1 play per confirmed order"
-    }
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        from inventory.models import Order
-        user_id = uuid.UUID(request.user.username)
-        total_orders = Order.objects.filter(
-            user_id=user_id,
-            payment_status='completed',
-        ).count()
-
-        return Response({
-            'user_id': str(user_id),
-            'total_orders': total_orders,
-            'plays_earned': total_orders,
-            'plays_calculation': '1 play per confirmed order',
-        })
 ```
 
 ---
@@ -521,6 +666,20 @@ class GamePlaysEarnedView(APIView):
 from rest_framework import serializers
 from gaming.models import RewardTier, GameReward
 from coupons.serializers import CouponSerializer
+
+
+class RecordPlaySerializer(serializers.Serializer):
+    game_session_id = serializers.CharField(max_length=255)
+    game_type = serializers.CharField(max_length=100)
+    won = serializers.BooleanField()
+    win_level = serializers.CharField(max_length=100, required=False, allow_null=True)
+
+    def validate(self, attrs):
+        if attrs.get('won') and not attrs.get('win_level'):
+            raise serializers.ValidationError(
+                {'win_level': 'win_level is required when won=true.'}
+            )
+        return attrs
 
 
 class RewardTierSerializer(serializers.ModelSerializer):
@@ -554,21 +713,21 @@ class GameRewardSerializer(serializers.ModelSerializer):
 ```python
 from django.urls import path
 from gaming.views import (
-    GamingWebhookView,
+    GamePlaysEarnedView,
+    RecordPlayView,
     UserRewardListView,
     UserRewardDetailView,
     RewardTierListCreateView,
     RewardTierDetailView,
-    GamePlaysEarnedView,
 )
 
 urlpatterns = [
-    path('gaming/webhook/', GamingWebhookView.as_view(), name='gaming-webhook'),
-    path('gaming/rewards/', UserRewardListView.as_view(), name='gaming-reward-list'),
-    path('gaming/rewards/<uuid:id>/', UserRewardDetailView.as_view(), name='gaming-reward-detail'),
-    path('gaming/reward-tiers/', RewardTierListCreateView.as_view(), name='reward-tier-list'),
-    path('gaming/reward-tiers/<uuid:id>/', RewardTierDetailView.as_view(), name='reward-tier-detail'),
-    path('gaming/earn/', GamePlaysEarnedView.as_view(), name='gaming-earn'),
+    path('gaming/earn/',                    GamePlaysEarnedView.as_view(),      name='gaming-earn'),
+    path('gaming/record-play/',             RecordPlayView.as_view(),           name='gaming-record-play'),
+    path('gaming/rewards/',                 UserRewardListView.as_view(),       name='gaming-reward-list'),
+    path('gaming/rewards/<uuid:id>/',       UserRewardDetailView.as_view(),     name='gaming-reward-detail'),
+    path('gaming/reward-tiers/',            RewardTierListCreateView.as_view(), name='reward-tier-list'),
+    path('gaming/reward-tiers/<uuid:id>/',  RewardTierDetailView.as_view(),     name='reward-tier-detail'),
 ]
 ```
 
@@ -577,7 +736,7 @@ urlpatterns = [
 ### Supabase Migration
 
 ```sql
--- Reward tiers (configures what coupons are issued per win level)
+-- Reward tiers (manager-configured prize table)
 CREATE TABLE IF NOT EXISTS public.reward_tiers (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name                TEXT NOT NULL,
@@ -593,24 +752,33 @@ CREATE TABLE IF NOT EXISTS public.reward_tiers (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Game rewards (audit log of every win event and issued coupon)
+-- Game plays (one row per play consumed — tracks quota)
+CREATE TABLE IF NOT EXISTS public.game_plays (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID NOT NULL,
+    game_session_id     TEXT UNIQUE NOT NULL,   -- Unity GUID — deduplication key
+    game_type           TEXT NOT NULL,
+    played_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Game rewards (win events + issued coupons — audit log)
 CREATE TABLE IF NOT EXISTS public.game_rewards (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID NOT NULL,
-    game_session_id     TEXT UNIQUE NOT NULL,  -- Deduplication key from gaming engine
+    game_play_id        UUID UNIQUE NOT NULL REFERENCES public.game_plays(id) ON DELETE CASCADE,
     game_type           TEXT NOT NULL,
     win_level           TEXT NOT NULL,
     reward_tier_id      UUID REFERENCES public.reward_tiers(id) ON DELETE SET NULL,
     coupon_id           UUID UNIQUE REFERENCES public.coupons(id) ON DELETE SET NULL,
     whatsapp_sent       BOOLEAN NOT NULL DEFAULT FALSE,
     whatsapp_delivered  BOOLEAN,
-    raw_payload         JSONB NOT NULL DEFAULT '{}',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Performance indexes
-CREATE INDEX IF NOT EXISTS idx_game_rewards_user ON public.game_rewards (user_id);
-CREATE INDEX IF NOT EXISTS idx_game_rewards_session ON public.game_rewards (game_session_id);
+CREATE INDEX IF NOT EXISTS idx_game_plays_user     ON public.game_plays  (user_id);
+CREATE INDEX IF NOT EXISTS idx_game_plays_session  ON public.game_plays  (game_session_id);
+CREATE INDEX IF NOT EXISTS idx_game_rewards_user   ON public.game_rewards (user_id);
 CREATE INDEX IF NOT EXISTS idx_reward_tiers_lookup ON public.reward_tiers (game_type, win_level) WHERE is_active = TRUE;
 ```
 
@@ -620,89 +788,179 @@ CREATE INDEX IF NOT EXISTS idx_reward_tiers_lookup ON public.reward_tiers (game_
 
 | Variable | Description |
 |---|---|
-| `GAMING_WEBHOOK_SECRET` | Shared HMAC-SHA256 secret between Dwarikas backend and the gaming engine. Store in Google Secret Manager. |
-| `GAMING_SYSTEM_USER_ID` | UUID of the system account used as `created_by` for auto-generated gaming reward coupons. Can be a dedicated service account in Supabase auth. |
+| `GAMING_SYSTEM_USER_ID` | UUID of the system account used as `created_by` for auto-generated gaming reward coupons. A dedicated service account in Supabase auth. |
+
+> **Removed:** `GAMING_WEBHOOK_SECRET` is no longer required. Authentication is handled by
+> Supabase JWT — the same middleware already in place for all other endpoints.
 
 ---
 
-## Integration Contract with the External Gaming Engine
+## Unity Integration Contract
 
-The gaming engine must:
-1. **Signal wins** by `POST`ing to `/api/v1/gaming/webhook/` with the payload below and `X-Gaming-Signature: sha256=<hmac>` header.
-2. **Retrieve play entitlements** by making a `GET /api/v1/gaming/earn/` call with the user's Supabase JWT to determine how many plays to grant.
+### Unity SDK Setup (C#)
 
-### Webhook Payload Schema
+```csharp
+// Package Manager → Add by git URL:
+// https://github.com/supabase-community/supabase-csharp.git
+//
+// Same Supabase URL and anon key as the Dwarikas app.
 
-```json
-{
-  "event": "win",
-  "game_session_id": "sess_abc123",
-  "game_type": "spin_wheel",
-  "win_level": "jackpot",
-  "user_id": "<supabase-user-uuid>",
-  "metadata": {
-    "game_name": "Eid Spin",
-    "spin_result": "Golden Star"
-  }
+var supabase = new Supabase.Client(
+    "https://your-project.supabase.co",
+    "your-anon-key",
+    new SupabaseOptions { AutoRefreshToken = true }
+);
+await supabase.InitializeAsync();
+```
+
+### Step 1 — Authenticate the Player
+
+```csharp
+// Player logs in with the same email/password as the Dwarikas shopping app.
+var session = await supabase.Auth.SignIn(email, password);
+string jwt = session.AccessToken;   // Valid Supabase JWT — reused for all API calls
+```
+
+> The player's identity in Unity is **identical** to their identity in the Dwarikas app.
+> No separate account or mapping table is required.
+
+### Step 2 — Check Plays Remaining (Before Showing Game)
+
+```csharp
+var request = UnityWebRequest.Get("https://api.dwarikas.com/api/v1/gaming/earn/");
+request.SetRequestHeader("Authorization", $"Bearer {jwt}");
+await request.SendWebRequest();
+
+// Response: { "plays_remaining": 3, "plays_earned": 12, "plays_used": 9 }
+var data = JsonUtility.FromJson<PlaysResponse>(request.downloadHandler.text);
+if (data.plays_remaining <= 0)
+    ShowNoPlaysScreen();
+else
+    ShowGameMenuWith(data.plays_remaining);
+```
+
+### Step 3 — Record a Play on Every Spin / Card / Quiz
+
+```csharp
+// Generate a unique session ID on the device before each play.
+string sessionId = System.Guid.NewGuid().ToString();
+
+// Determine outcome with your Unity game logic (spin result, scratch reveal, etc.)
+bool playerWon = spinResult == WinningSegment;
+string winLevel = playerWon ? "jackpot" : null;
+
+var payload = JsonUtility.ToJson(new RecordPlayPayload {
+    game_session_id = sessionId,
+    game_type       = "spin_wheel",
+    won             = playerWon,
+    win_level       = winLevel,
+});
+
+var request = new UnityWebRequest(
+    "https://api.dwarikas.com/api/v1/gaming/record-play/",
+    "POST"
+);
+request.uploadHandler   = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(payload));
+request.downloadHandler = new DownloadHandlerBuffer();
+request.SetRequestHeader("Authorization", $"Bearer {jwt}");
+request.SetRequestHeader("Content-Type",  "application/json");
+
+await request.SendWebRequest();
+
+if (request.responseCode == 200) {
+    var result = JsonUtility.FromJson<RecordPlayResponse>(request.downloadHandler.text);
+    if (result.won) {
+        ShowWinScreen(result.coupon_code, result.coupon_discount_value);
+        // e.g., "🎉 You won! Use code GAME-XXXX for 20% off!"
+    } else {
+        ShowLossScreen(result.plays_remaining);
+    }
+} else if (request.responseCode == 403) {
+    ShowNoPlaysScreen(); // plays exhausted
 }
 ```
 
-### Supported `event` values
+### Step 4 — Player Views Rewards in Dwarikas App
 
-| Event | Action |
-|---|---|
-| `win` | Triggers coupon issuance |
-| `game_started` | Acknowledged, ignored |
-| `game_ended` | Acknowledged, ignored |
-| Anything else | Acknowledged, ignored |
-
-### Response Contract
-
-The backend **always** returns HTTP 200 to the gaming engine (including error cases), to prevent infinite retry loops. If the event is invalid or duplicate, it is silently discarded.
+The player opens the Dwarikas shopping app and navigates to "My Rewards". The app calls
+`GET /api/v1/gaming/rewards/` with the same Supabase JWT and shows all earned coupons.
+Coupons are applied at checkout via the standard `apply-coupon` endpoint from Spec 20.
 
 ---
 
 ## Full Win Flow Sequence
 
 ```
-Gaming Engine              Dwarikas Backend             WhatsApp → User
-     |                           |                            |
-     |-- POST /gaming/webhook/ ->|                            |
-     |   { event: "win",         |                            |
-     |     user_id, session_id,  |                            |
-     |     game_type, win_level } |                           |
-     |                    verify HMAC signature               |
-     |                    find_matching_tier()                |
-     |                    create_gaming_reward_coupon()       |
-     |                    create GameReward record            |
-     |                    send WhatsApp notification -------> |
-     |<-- HTTP 200 --------------|   "You won! Code: GAMExxxxx" |
-     |                           |                            |
-     |                                                        |
-Customer opens Dwarikas App                                   |
-     |                           |                            |
-     |-- GET /gaming/rewards/ -->|                            |
-     |<-- [{ coupon: { code: "GAMExxxxx", ... } }]           |
-     |                           |                            |
-     |-- POST /checkout/apply-coupon/ { coupon_code: "GAMExxxxx" }
-     |<-- { discount_amount: "50.00", final_total: "90.00" } |
+Unity Game (Android/iOS)           Dwarikas Backend             WhatsApp → Player
+       |                                  |                            |
+       |-- Auth: supabase.SignIn() -----> |  (Supabase Auth — shared) |
+       |<-- Supabase JWT -----------------|                            |
+       |                                  |                            |
+       |-- GET /gaming/earn/ -----------> |                            |
+       |<-- { plays_remaining: 3 } -------|                            |
+       |                                  |                            |
+       |   [Player spins — wins jackpot]  |                            |
+       |                                  |                            |
+       |-- POST /gaming/record-play/ ---> |                            |
+       |   { session_id, game_type,       |                            |
+       |     won: true,                   |   validate JWT → user_id   |
+       |     win_level: "jackpot" }       |   check plays_remaining    |
+       |                                  |   create GamePlay          |
+       |                                  |   find_matching_tier()     |
+       |                                  |   create_gaming_reward_coupon()
+       |                                  |   create GameReward        |
+       |                                  |   send WhatsApp ---------> |
+       |<-- { won: true,                  |   "You won! GAME-XXXX"     |
+       |      coupon_code: "GAME-XXXX",   |                            |
+       |      plays_remaining: 2 } -------|                            |
+       |                                  |                            |
+       |   [Show win screen in Unity]     |                            |
+       |                                  |                            |
+Player opens Dwarikas App                 |                            |
+       |                                  |                            |
+       |-- GET /gaming/rewards/ --------> |                            |
+       |<-- [{ coupon: { code: "GAME-XXXX", discount: "20%" } }]      |
+       |                                  |                            |
+       |-- POST /checkout/apply-coupon/ { coupon_code: "GAME-XXXX" }  |
+       |<-- { discount_amount: "50.00", final_total: "90.00" }        |
 ```
+
+---
+
+## Security Model
+
+| Concern | How it is handled |
+|---|---|
+| **User identity** | Extracted from Supabase JWT — never trusted from request body |
+| **Play quota abuse** | Server enforces `plays_remaining > 0` before recording any play |
+| **Replay attacks** | `game_session_id` (Unity GUID) has a UNIQUE DB constraint — duplicate calls are idempotent |
+| **Win spoofing (calling API without playing)** | Server enforces quota: each call consumes a play. Worst case: user claims best-tier coupon. Coupon value is capped by `RewardTier.max_discount_cap` |
+| **JWT expiry** | Supabase SDK auto-refreshes tokens (`AutoRefreshToken = true`) |
+| **Man-in-the-middle** | All traffic over HTTPS — Cloud Run enforces TLS |
+
+> **Note on win spoofing:** A technically sophisticated user could call `/gaming/record-play/`
+> with `won=true` directly from a REST client, bypassing the Unity game entirely. The risk is
+> bounded: they consume one of their earned plays per fake win, and the maximum coupon value
+> is controlled by the `RewardTier` configuration. For a Phase 1 loyalty program this is an
+> acceptable risk. Phase 2 can add server-side game outcome validation if needed.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `POST /api/v1/gaming/webhook/` with valid HMAC signature and `event: "win"` creates a `GameReward` and a single-use user-specific `Coupon`
-- [ ] Duplicate `game_session_id` is handled idempotently — no duplicate coupon issued
-- [ ] Invalid HMAC signature returns HTTP 401
-- [ ] Non-`win` events return HTTP 200 without side effects
+- [ ] `POST /api/v1/gaming/record-play/` with valid JWT, `won=true`, and valid `win_level` creates a `GamePlay`, `GameReward`, and single-use user-specific `Coupon`
+- [ ] `POST /api/v1/gaming/record-play/` with `won=false` creates only a `GamePlay` — no coupon issued
+- [ ] Calling `record-play/` with a duplicate `game_session_id` returns the existing result without creating new records (idempotent)
+- [ ] `record-play/` returns HTTP 403 when `plays_remaining <= 0`
+- [ ] `record-play/` returns HTTP 400 when `won=true` but `win_level` is missing
+- [ ] `GET /api/v1/gaming/earn/` returns correct `plays_earned`, `plays_used`, `plays_remaining`
 - [ ] `win_level: "any"` in `RewardTier` correctly acts as wildcard fallback when no exact match exists
 - [ ] `GET /api/v1/gaming/rewards/` returns only the calling user's rewards with coupon codes
-- [ ] WhatsApp notification is sent when `RewardTier.notify_whatsapp = true` and user has a phone number in Profile
+- [ ] WhatsApp notification is sent when `RewardTier.notify_whatsapp=true` and user has a phone number
 - [ ] WhatsApp delivery failure does NOT roll back the coupon — reward is preserved regardless
-- [ ] `GET /api/v1/gaming/earn/` returns correct play count based on confirmed orders
-- [ ] Generated coupon from gaming engine can be applied at checkout via Spec 20 `apply-coupon` endpoint
-- [ ] Full test suite: webhook signature, idempotency, tier matching, coupon generation, WhatsApp delivery, play count
+- [ ] Generated coupon can be applied at checkout via Spec 20 `apply-coupon` endpoint
+- [ ] All endpoints reject requests without a valid Supabase JWT (HTTP 401)
+- [ ] Full test suite: play quota enforcement, idempotency, tier matching (exact + wildcard), coupon generation, WhatsApp delivery, plays count calculation
 
 ---
 
@@ -712,15 +970,26 @@ Customer opens Dwarikas App                                   |
 gaming/
 ├── __init__.py
 ├── apps.py
-├── models.py
-├── serializers.py
-├── services.py          # process_win_event(), find_matching_tier()
-├── webhook.py           # verify_gaming_webhook_signature()
+├── models.py           # RewardTier, GamePlay, GameReward
+├── serializers.py      # RecordPlaySerializer, RewardTierSerializer, GameRewardSerializer
+├── services.py         # record_play(), find_matching_tier(), get_plays_remaining()
 ├── views.py
 ├── urls.py
 └── tests/
     ├── __init__.py
-    ├── test_webhook.py
-    ├── test_rewards.py
-    └── test_reward_tiers.py
+    ├── test_record_play.py     # quota enforcement, idempotency, win/loss paths
+    ├── test_rewards.py         # reward list/detail views
+    ├── test_reward_tiers.py    # manager CRUD
+    └── test_earn.py            # plays calculation
 ```
+
+---
+
+## Unity Project Notes
+
+- **Target platforms:** Android API 24+, iOS 14+
+- **Supabase SDK:** `supabase-community/supabase-csharp` (Unity-compatible)
+- **Supabase project:** Same project URL and anon key as the Dwarikas app
+- **Auth method:** Email + password (same credentials as Dwarikas account)
+- **API calls:** `UnityWebRequest` with `Authorization: Bearer <jwt>` header
+- **Session ID generation:** `System.Guid.NewGuid().ToString()` — generated client-side before each play, sent to server for deduplication
