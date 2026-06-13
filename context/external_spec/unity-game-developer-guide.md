@@ -3,6 +3,7 @@
 **Audience:** Unity game developers building the Dwarikas loyalty game (Android / iOS)  
 **Backend:** Dwarikas API (Django / Cloud Run)  
 **Auth system:** Supabase (shared with the Dwarikas shopping app)  
+**Ad SDK:** Unity LevelPlay (rewarded video + interstitial)  
 **Last updated:** 2026-06-13
 
 ---
@@ -10,20 +11,25 @@
 ## Overview
 
 The Dwarikas loyalty game is a **first-party Unity mobile game** (Android + iOS) that rewards
-customers for shopping. Players earn game plays by making purchases in the Dwarikas app. When
-they win a game (spin-the-wheel, scratch card, quiz, etc.), the backend automatically issues a
-discount coupon to their Dwarikas account.
+customers for shopping. Players earn game plays in two ways:
+
+1. **By shopping** — 1 play per completed order in the Dwarikas app *(unlimited)*
+2. **By watching rewarded ads** — 1 play per fully-watched video ad *(max 5 per day)*
+
+When a player wins a game (spin-the-wheel, scratch card, quiz, etc.), the backend automatically
+issues a discount coupon to their Dwarikas account.
 
 As a Unity developer, your responsibilities are:
 
 1. **Authenticate** the player using the same Supabase project as the Dwarikas app.
-2. **Check** how many game plays the player has remaining before showing the game.
-3. **Run** the game and determine the outcome (win / loss) using Unity game logic.
-4. **Report** the outcome to the Dwarikas backend via one API call.
-5. **Display** the coupon code to the player if they won.
+2. **Integrate Unity LevelPlay** for rewarded video and interstitial ads.
+3. **Check** how many game plays the player has remaining before showing the game.
+4. **Allow players to watch ads** to earn bonus plays when they run out.
+5. **Run** the game and determine the outcome (win / loss) using Unity game logic.
+6. **Report** the outcome to the Dwarikas backend.
+7. **Display** the coupon code to the player if they won.
 
 The backend handles coupon generation, WhatsApp notification, and reward storage.
-Your game only needs to make **two API calls** in the normal flow.
 
 ---
 
@@ -32,14 +38,15 @@ Your game only needs to make **two API calls** in the normal flow.
 1. [Project Credentials](#1-project-credentials)
 2. [Unity SDK Setup](#2-unity-sdk-setup)
 3. [Authentication Flow](#3-authentication-flow)
-4. [API Reference](#4-api-reference)
-5. [Complete Game Flow — Step by Step](#5-complete-game-flow--step-by-step)
-6. [C# Code Samples](#6-c-code-samples)
-7. [Game Types and Win Levels](#7-game-types-and-win-levels)
-8. [Error Handling Reference](#8-error-handling-reference)
-9. [Network Retry and Idempotency](#9-network-retry-and-idempotency)
-10. [Testing Against the Backend](#10-testing-against-the-backend)
-11. [UI/UX Guidelines](#11-uiux-guidelines)
+4. [Ad Monetization — Unity LevelPlay](#4-ad-monetization--unity-levelplay)
+5. [API Reference](#5-api-reference)
+6. [Complete Game Flow — Step by Step](#6-complete-game-flow--step-by-step)
+7. [C# Code Samples](#7-c-code-samples)
+8. [Game Types and Win Levels](#8-game-types-and-win-levels)
+9. [Error Handling Reference](#9-error-handling-reference)
+10. [Network Retry and Idempotency](#10-network-retry-and-idempotency)
+11. [Testing Against the Backend](#11-testing-against-the-backend)
+12. [UI/UX Guidelines](#12-uiux-guidelines)
 
 ---
 
@@ -53,18 +60,28 @@ Your game only needs to make **two API calls** in the normal flow.
 | `SUPABASE_URL` | Your Supabase project URL | Provided by backend team |
 | `SUPABASE_ANON_KEY` | Public anon key for the Supabase project | Provided by backend team |
 | `DWARIKAS_API_BASE_URL` | Base URL of the Dwarikas API | e.g., `https://api.dwarikas.com` |
+| `LEVELPLAY_APP_KEY` | Unity LevelPlay app key | Unity LevelPlay Dashboard |
+| `REWARDED_PLACEMENT_ID` | Placement ID for rewarded video ad unit | Unity LevelPlay Dashboard |
+| `INTERSTITIAL_PLACEMENT_ID` | Placement ID for interstitial ad unit | Unity LevelPlay Dashboard |
 
-Store these in a Unity `ScriptableObject` or `Resources` file that is excluded from source
-control via `.gitignore`. **Never commit API keys to git.**
+Store all credentials in a Unity `ScriptableObject` excluded from source control via `.gitignore`.
+**Never commit API keys or ad keys to git.**
 
-Example `GameConfig.cs`:
 ```csharp
 [CreateAssetMenu(fileName = "GameConfig", menuName = "Dwarikas/Game Config")]
 public class GameConfig : ScriptableObject
 {
+    [Header("Supabase")]
     public string SupabaseUrl;
     public string SupabaseAnonKey;
+
+    [Header("Dwarikas API")]
     public string DwarikasApiBaseUrl;
+
+    [Header("Unity LevelPlay")]
+    public string LevelPlayAppKey;
+    public string RewardedPlacementId;
+    public string InterstitialPlacementId;
 }
 ```
 
@@ -72,7 +89,7 @@ public class GameConfig : ScriptableObject
 
 ## 2. Unity SDK Setup
 
-### Supabase C# SDK
+### 2.1 — Supabase C# SDK
 
 Add the Supabase community SDK to your Unity project.
 
@@ -81,7 +98,7 @@ Add the Supabase community SDK to your Unity project.
 https://github.com/supabase-community/supabase-csharp.git
 ```
 
-**Or via NuGet for Unity** (if using NuGetForUnity package):
+**Or via NuGet for Unity:**
 ```
 Supabase
 Supabase.Gotrue
@@ -90,20 +107,43 @@ Supabase.Gotrue
 **Minimum Unity version:** 2019.4 LTS  
 **Supported platforms:** Android (API 24+), iOS (14+)
 
-### Initialise the Client
+### 2.2 — Unity LevelPlay SDK
 
-Create a singleton `SupabaseManager` that initialises once at app start and is accessible globally.
+LevelPlay is Unity's built-in ad mediation platform (formerly IronSource). It handles
+both rewarded video and interstitial ads.
+
+**Via Unity Package Manager → Add by name:**
+```
+com.unity.services.levelplay
+```
+
+Or download directly from the [Unity LevelPlay Integration Manager](https://developers.is.com/ironsource-mobile/unity/unity-plugin/).
+
+**LevelPlay Dashboard Setup (do this before coding):**
+1. Sign in to [LevelPlay Dashboard](https://platform.ironsrc.com)
+2. Create a new App → select Android / iOS
+3. Get your **App Key** → store as `LEVELPLAY_APP_KEY`
+4. Create Ad Unit → **Rewarded Video** → get Placement ID → store as `REWARDED_PLACEMENT_ID`
+5. Create Ad Unit → **Interstitial** → get Placement ID → store as `INTERSTITIAL_PLACEMENT_ID`
+6. Add ad networks (Unity Ads is included by default; also add AdMob via mediation for higher fill rate)
+
+### 2.3 — Initialise Both SDKs
+
+Create a single `GameBootstrap` MonoBehaviour that initialises everything at app start.
 
 ```csharp
 using Supabase;
+using IronSourceSDK;
 using UnityEngine;
 
-public class SupabaseManager : MonoBehaviour
+public class GameBootstrap : MonoBehaviour
 {
-    public static SupabaseManager Instance { get; private set; }
-    public Supabase.Client Client { get; private set; }
+    public static GameBootstrap Instance { get; private set; }
 
     [SerializeField] private GameConfig config;
+
+    public Supabase.Client Supabase  { get; private set; }
+    public bool            IsReady   { get; private set; }
 
     async void Awake()
     {
@@ -111,18 +151,35 @@ public class SupabaseManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        // ── Supabase ─────────────────────────────────────────────────────
         var options = new SupabaseOptions
         {
-            AutoRefreshToken = true,   // IMPORTANT: keeps the JWT alive
-            PersistSession   = true,   // Saves session to PlayerPrefs across app launches
+            AutoRefreshToken = true,  // keeps JWT alive automatically
+            PersistSession   = true,  // saves session across app restarts
         };
+        Supabase = new Supabase.Client(config.SupabaseUrl, config.SupabaseAnonKey, options);
+        await Supabase.InitializeAsync();
 
-        Client = new Supabase.Client(config.SupabaseUrl, config.SupabaseAnonKey, options);
-        await Client.InitializeAsync();
+        // ── Unity LevelPlay ───────────────────────────────────────────────
+        IronSource.Agent.init(config.LevelPlayAppKey,
+                              IronSourceAdUnits.REWARDED_VIDEO,
+                              IronSourceAdUnits.INTERSTITIAL);
+
+        // Set the Supabase user ID so Unity's S2S callback can identify the player
+        if (Supabase.Auth.CurrentUser != null)
+            SetLevelPlayUserId(Supabase.Auth.CurrentUser.Id);
+
+        IsReady = true;
     }
 
-    public string AccessToken => Client.Auth.CurrentSession?.AccessToken;
-    public bool IsLoggedIn    => Client.Auth.CurrentUser != null;
+    public void SetLevelPlayUserId(string supabaseUserId)
+    {
+        // This ID is passed in Unity's server-to-server ad verification callback
+        LevelPlay.SetDynamicUserId(supabaseUserId);
+    }
+
+    public string AccessToken => Supabase.Auth.CurrentSession?.AccessToken;
+    public bool   IsLoggedIn  => Supabase.Auth.CurrentUser != null;
 }
 ```
 
@@ -132,23 +189,26 @@ public class SupabaseManager : MonoBehaviour
 
 ### Key Principle
 
-The player uses the **same email and password** for the Unity game and the Dwarikas shopping app.
-Both apps share one Supabase project. After login, Supabase issues a JWT that is accepted by all
-Dwarikas backend endpoints.
+The player uses the **same email and password** for the Unity game and the Dwarikas
+shopping app. Both share one Supabase project. After login, the JWT is accepted by
+all Dwarikas backend endpoints.
 
-### Login Screen
+> **Important:** After login, call `SetLevelPlayUserId()` so Unity's ad system knows
+> which Supabase user is playing. This is required for server-side ad verification.
 
-Your game must have a login screen with email + password fields. After successful login, store the
-session (the SDK does this automatically with `PersistSession = true`) and proceed to the game
-lobby.
+### Login
 
 ```csharp
-public async Task<bool> Login(string email, string password)
+public async Task<bool> LoginAsync(string email, string password)
 {
     try
     {
-        var session = await SupabaseManager.Instance.Client.Auth.SignIn(email, password);
-        return session?.AccessToken != null;
+        var session = await GameBootstrap.Instance.Supabase.Auth.SignIn(email, password);
+        if (session?.AccessToken == null) return false;
+
+        // CRITICAL: Update LevelPlay user ID immediately after login
+        GameBootstrap.Instance.SetLevelPlayUserId(session.User.Id);
+        return true;
     }
     catch (Exception ex)
     {
@@ -158,30 +218,240 @@ public async Task<bool> Login(string email, string password)
 }
 ```
 
-### Token Refresh
-
-The SDK auto-refreshes the JWT when `AutoRefreshToken = true`. You do not need to manage token
-expiry manually. Always read the token fresh before making an API call:
-
-```csharp
-string jwt = SupabaseManager.Instance.AccessToken;
-```
-
 ### Session Persistence
 
-With `PersistSession = true`, the player will not need to log in every time they open the game.
-On app launch, call `InitializeAsync()` (done in `Awake`) — the SDK restores the previous session
-from `PlayerPrefs` automatically.
+With `PersistSession = true`, the player will not need to log in every time.
+On app launch, `InitializeAsync()` restores the previous session automatically.
+After restore, always refresh the LevelPlay user ID:
+
+```csharp
+// In your post-init check:
+if (GameBootstrap.Instance.IsLoggedIn)
+    GameBootstrap.Instance.SetLevelPlayUserId(
+        GameBootstrap.Instance.Supabase.Auth.CurrentUser.Id
+    );
+```
 
 ### Logout
 
 ```csharp
-await SupabaseManager.Instance.Client.Auth.SignOut();
+await GameBootstrap.Instance.Supabase.Auth.SignOut();
+LevelPlay.SetDynamicUserId(null);  // clear user from ad system
 ```
 
 ---
 
-## 4. API Reference
+## 4. Ad Monetization — Unity LevelPlay
+
+### 4.1 — Ad Strategy Overview
+
+| Ad Type | When Shown | Player Action | Play Grant | Revenue |
+|---|---|---|---|---|
+| **Rewarded Video** | Player taps "Watch Ad for a free play" | Voluntary — player chooses to watch | +1 play (max 5/day) | Highest eCPM |
+| **Interstitial** | After a loss screen, before lobby returns | Automatic — player sees it passively | None | Medium eCPM |
+
+> **No banner ads.** Banners are excluded — they degrade the premium feel of the game
+> and generate negligible revenue compared to rewarded and interstitial formats.
+
+### 4.2 — Daily Ad Play Cap
+
+Players can earn a maximum of **5 bonus plays per day** through rewarded ads.
+This cap is enforced by the backend — the game must still call `GET /gaming/ad-status/`
+to check the current quota and reflect it in the UI accurately.
+
+The cap resets at **midnight local time** on the server (IST).
+
+### 4.3 — Rewarded Video Ad Flow
+
+```
+Player taps "Watch Ad for a free play"
+        │
+        ├─ Call GET /gaming/ad-status/  ← check quota before loading
+        │
+        ├─ can_watch_ad = false → show "Daily limit reached" toast
+        │
+        ├─ can_watch_ad = true → call rewardedAd.LoadAd()
+        │
+        ├─ OnAdLoaded → call rewardedAd.ShowAd()
+        │
+        ├─ Player watches full ad
+        │
+        ├─ OnAdRewarded fires (full watch confirmed by Unity SDK)
+        │
+        ├─ Call POST /gaming/grant-ad-play/ (JWT auth)
+        │
+        ├─ 200 OK → show "+1 play earned!" animation
+        │           update lobby play count
+        │           reload next ad in background
+        │
+        └─ 403 → show "Daily limit reached" (race condition edge case)
+```
+
+### 4.4 — Interstitial Ad Flow
+
+```
+Player loses a game
+        │
+        ├─ Show loss screen for 2 seconds
+        │
+        ├─ interstitialAd.IsAdReady() ?
+        │   ├─ YES → show interstitial
+        │   │         OnAdClosed → navigate to lobby
+        │   └─ NO  → navigate to lobby immediately (no delay)
+        │
+        └─ Pre-load next interstitial in background
+```
+
+> **Never show an interstitial after a win.** Win screens should feel celebratory and
+> uninterrupted. Interstitials only appear on the loss-to-lobby transition.
+
+### 4.5 — Ad Manager Class (Full Implementation)
+
+```csharp
+using System;
+using System.Threading.Tasks;
+using IronSourceSDK;
+using UnityEngine;
+
+public class AdManager : MonoBehaviour
+{
+    public static AdManager Instance { get; private set; }
+
+    [SerializeField] private GameConfig config;
+
+    // Events for UI to listen to
+    public event Action<int>  OnAdPlayGranted;    // fires with new plays_remaining count
+    public event Action       OnDailyLimitReached;
+    public event Action       OnInterstitialClosed;
+
+    private LevelPlayRewardedAd     _rewardedAd;
+    private LevelPlayInterstitialAd _interstitialAd;
+    private DwarikasApiClient       _api;
+
+    void Awake()
+    {
+        if (Instance != null) { Destroy(gameObject); return; }
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    void Start()
+    {
+        _api = new DwarikasApiClient(
+            config.DwarikasApiBaseUrl,
+            () => GameBootstrap.Instance.AccessToken
+        );
+
+        InitialiseRewardedAd();
+        InitialiseInterstitialAd();
+    }
+
+    // ─── REWARDED VIDEO ──────────────────────────────────────────────────────
+
+    void InitialiseRewardedAd()
+    {
+        _rewardedAd = new LevelPlayRewardedAd(config.RewardedPlacementId);
+
+        _rewardedAd.OnAdLoaded     += info => Debug.Log("Rewarded ad loaded.");
+        _rewardedAd.OnAdLoadFailed += error => Debug.LogWarning($"Rewarded load failed: {error.ErrorMessage}");
+        _rewardedAd.OnAdRewarded   += OnRewardedAdCompleted;
+        _rewardedAd.OnAdShowFailed += error => Debug.LogWarning($"Rewarded show failed: {error.ErrorMessage}");
+
+        _rewardedAd.LoadAd();
+    }
+
+    public async Task ShowRewardedAdAsync()
+    {
+        // 1. Check quota before wasting a loaded ad on a capped user
+        AdStatusResponse status;
+        try { status = await _api.GetAdStatusAsync(); }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Could not check ad status: {ex.Message}");
+            return;
+        }
+
+        if (!status.CanWatchAd)
+        {
+            OnDailyLimitReached?.Invoke();
+            return;
+        }
+
+        // 2. Show the ad
+        if (_rewardedAd.IsAdReady())
+            _rewardedAd.ShowAd(config.RewardedPlacementId);
+        else
+        {
+            Debug.LogWarning("Rewarded ad not ready. Reloading.");
+            _rewardedAd.LoadAd();
+        }
+    }
+
+    async void OnRewardedAdCompleted(LevelPlayAdInfo adInfo, LevelPlayReward reward)
+    {
+        // OnAdRewarded only fires after the player watches the FULL ad
+        try
+        {
+            var result = await _api.GrantAdPlayAsync(adInfo.AdUnitId);
+
+            if (result.Granted)
+                OnAdPlayGranted?.Invoke(result.TotalPlaysRemaining);
+            else
+                OnDailyLimitReached?.Invoke();
+        }
+        catch (NoPlaysRemainingException)
+        {
+            OnDailyLimitReached?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"grant-ad-play failed: {ex.Message}");
+        }
+        finally
+        {
+            // Always pre-load the next rewarded ad
+            _rewardedAd.LoadAd();
+        }
+    }
+
+    // ─── INTERSTITIAL ────────────────────────────────────────────────────────
+
+    void InitialiseInterstitialAd()
+    {
+        _interstitialAd = new LevelPlayInterstitialAd(config.InterstitialPlacementId);
+
+        _interstitialAd.OnAdLoaded     += info => Debug.Log("Interstitial loaded.");
+        _interstitialAd.OnAdLoadFailed += error => Debug.LogWarning($"Interstitial load failed: {error.ErrorMessage}");
+        _interstitialAd.OnAdClosed     += info =>
+        {
+            OnInterstitialClosed?.Invoke();
+            _interstitialAd.LoadAd();   // pre-load next one immediately
+        };
+
+        _interstitialAd.LoadAd();
+    }
+
+    /// <summary>
+    /// Call this after the loss screen. If an interstitial is ready it will show;
+    /// if not, fires OnInterstitialClosed immediately so the game can continue.
+    /// </summary>
+    public void ShowInterstitialAfterLoss()
+    {
+        if (_interstitialAd.IsAdReady())
+            _interstitialAd.ShowAd();
+        else
+        {
+            // Ad not loaded — don't block the player, proceed to lobby
+            OnInterstitialClosed?.Invoke();
+            _interstitialAd.LoadAd();
+        }
+    }
+}
+```
+
+---
+
+## 5. API Reference
 
 **Base URL:** `{DWARIKAS_API_BASE_URL}/api/v1`
 
@@ -191,52 +461,135 @@ Authorization: Bearer <supabase_access_token>
 Content-Type: application/json
 ```
 
-> All endpoints return HTTP **401** if the JWT is missing or expired.
+> All endpoints return HTTP **401** if the JWT is missing or expired. Redirect to login screen.
 
 ---
 
-### 4.1 — GET `/gaming/earn/`
+### 5.1 — GET `/gaming/earn/`
 
-**Purpose:** Check how many game plays the player has earned and how many they have left.
+**Purpose:** Check all plays available to the player (from orders and from ad plays today).
 
-**Call when:** On the game lobby / main menu screen, before showing the "Play" button.
+**Call when:** On the game lobby screen, before showing the "Play" button.
 
 **Request:**
 ```
 GET {BASE_URL}/api/v1/gaming/earn/
 Authorization: Bearer <jwt>
 ```
-*(No request body)*
 
 **Success Response — HTTP 200:**
 ```json
 {
     "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "plays_earned": 12,
-    "plays_used": 10,
-    "plays_remaining": 2,
-    "plays_calculation": "1 play per confirmed order"
+    "order_plays_earned": 12,
+    "order_plays_used": 10,
+    "order_plays_remaining": 2,
+    "ad_plays_granted_today": 2,
+    "ad_plays_used_today": 1,
+    "ad_plays_remaining_today": 1,
+    "ad_plays_limit_per_day": 5,
+    "total_plays_remaining": 3,
+    "plays_calculation": "1 play per confirmed order + up to 5 ad plays per day"
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `plays_earned` | int | Total plays earned from completed Dwarikas orders |
-| `plays_used` | int | Plays already consumed (win or loss) |
-| `plays_remaining` | int | Plays still available — use this to decide if "Play" is enabled |
-| `plays_calculation` | string | Human-readable formula, display in UI if desired |
+| `order_plays_remaining` | int | Plays from completed Dwarikas orders |
+| `ad_plays_remaining_today` | int | Bonus plays available from ads today |
+| `ad_plays_limit_per_day` | int | Daily ad play cap (currently 5) |
+| `total_plays_remaining` | int | **Use this to decide if "Play Now" is enabled** |
 
 **UI logic:**
-- If `plays_remaining > 0` → show "Play Now" button (active)
-- If `plays_remaining == 0` → show "No plays left — shop to earn more" message
+- `total_plays_remaining > 0` → "Play Now" button enabled
+- `total_plays_remaining == 0` → "No plays left" state
+- `ad_plays_remaining_today > 0` → "Watch Ad" button enabled
+- `ad_plays_remaining_today == 0` → "Watch Ad" button greyed out
 
 ---
 
-### 4.2 — POST `/gaming/record-play/`
+### 5.2 — GET `/gaming/ad-status/`
 
-**Purpose:** Tell the backend that the player just played, and report whether they won.
+**Purpose:** Check ad play quota before loading a rewarded ad. Lightweight call —
+use this instead of `/gaming/earn/` when you only need ad quota info.
 
-**Call when:** Immediately **after** the game outcome is determined (after the spin stops, after the scratch reveal, after the quiz answer, etc.). Do **not** call this before the game starts.
+**Request:**
+```
+GET {BASE_URL}/api/v1/gaming/ad-status/
+Authorization: Bearer <jwt>
+```
+
+**Success Response — HTTP 200:**
+```json
+{
+    "can_watch_ad": true,
+    "ad_plays_granted_today": 2,
+    "ad_plays_remaining_today": 3,
+    "ad_plays_limit_per_day": 5,
+    "resets_at": "2026-06-14T00:00:00+05:30"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `can_watch_ad` | boolean | **Check this first** — `false` means daily cap reached |
+| `ad_plays_remaining_today` | int | How many more ad plays are available today |
+| `resets_at` | string (ISO 8601) | When the daily cap resets — show this in the UI |
+
+---
+
+### 5.3 — POST `/gaming/grant-ad-play/`
+
+**Purpose:** Tell the backend the player just watched a full rewarded ad and should receive
++1 play. Call this inside `OnAdRewarded` — which Unity SDK only fires after a **complete** watch.
+
+**Request:**
+```
+POST {BASE_URL}/api/v1/gaming/grant-ad-play/
+Authorization: Bearer <jwt>
+Content-Type: application/json
+```
+
+```json
+{
+    "ad_placement_id": "Rewarded_Android",
+    "ad_unit_id": "abc123xyz"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ad_placement_id` | string | ✅ | Your LevelPlay placement ID (from `GameConfig`) |
+| `ad_unit_id` | string | ✅ | Ad unit ID from `LevelPlayAdInfo.AdUnitId` |
+
+**Success Response — HTTP 200 (play granted):**
+```json
+{
+    "granted": true,
+    "ad_plays_granted_today": 3,
+    "ad_plays_remaining_today": 2,
+    "total_plays_remaining": 4
+}
+```
+
+**Error Response — HTTP 403 (daily limit reached):**
+```json
+{
+    "granted": false,
+    "detail": "Daily ad play limit reached. Come back tomorrow!",
+    "resets_at": "2026-06-14T00:00:00+05:30"
+}
+```
+
+> **When to call:** Only inside `OnAdRewarded`. Never call this after `OnAdShowFailed`,
+> `OnAdClosed` without a reward, or any other lifecycle event.
+
+---
+
+### 5.4 — POST `/gaming/record-play/`
+
+**Purpose:** Report a game outcome (win or loss). Call this after every spin/card/quiz,
+regardless of the play source (order or ad).
 
 **Request:**
 ```
@@ -245,7 +598,6 @@ Authorization: Bearer <jwt>
 Content-Type: application/json
 ```
 
-**Request Body:**
 ```json
 {
     "game_session_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
@@ -257,12 +609,12 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `game_session_id` | string | ✅ Always | A GUID you generate in Unity before each play. Used for deduplication. See [Section 9](#9-network-retry-and-idempotency). |
-| `game_type` | string | ✅ Always | The type of game being played. Must match a configured value. See [Section 7](#7-game-types-and-win-levels). |
-| `won` | boolean | ✅ Always | `true` if the player won, `false` if they lost. |
-| `win_level` | string | ✅ If `won=true` | The prize tier the player won. Must match a configured value. See [Section 7](#7-game-types-and-win-levels). Omit or set `null` if `won=false`. |
+| `game_session_id` | string | ✅ Always | GUID generated by Unity before each play. See [Section 10](#10-network-retry-and-idempotency). |
+| `game_type` | string | ✅ Always | Game type — must match configured values. See [Section 8](#8-game-types-and-win-levels). |
+| `won` | boolean | ✅ Always | `true` if player won, `false` if lost. |
+| `win_level` | string | ✅ If `won=true` | Prize tier label. Required when `won=true`, omit/null if lost. |
 
-**Success Response — Win — HTTP 200:**
+**Response — Win — HTTP 200:**
 ```json
 {
     "play_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
@@ -275,44 +627,29 @@ Content-Type: application/json
 }
 ```
 
-**Success Response — Loss — HTTP 200:**
+**Response — Loss — HTTP 200:**
 ```json
 {
     "play_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-    "plays_remaining": 1,
+    "plays_remaining": 2,
     "won": false,
     "coupon_code": null
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `play_id` | string (UUID) | The ID of this play record on the server |
-| `plays_remaining` | int | Updated play count after this play |
-| `won` | boolean | Server-confirmed win status |
-| `coupon_code` | string \| null | The coupon code to show the player. `null` on a loss or if no matching reward tier was configured. |
-| `coupon_discount_type` | string | `"percentage"` or `"flat_amount"` — present only on win |
-| `coupon_discount_value` | string | Numeric discount value as a string — present only on win |
-| `coupon_valid_until` | string | ISO 8601 date `YYYY-MM-DD` — present only on win |
+**Error Responses:**
 
-**Error responses:**
-
-| HTTP Code | Meaning | What to do |
-|---|---|---|
-| `400 Bad Request` | Invalid payload (missing fields, wrong types) | Log the error, show generic "Something went wrong" screen |
-| `401 Unauthorized` | JWT missing or expired | Redirect player to login screen |
-| `403 Forbidden` | No plays remaining | Show "No plays left" screen |
-
-> **Important:** The play is consumed by this call whether or not the player won. A 200 response
-> (even with `won: false`) means one play was deducted.
+| Code | Meaning |
+|---|---|
+| `400` | Bad payload (missing fields) |
+| `401` | JWT expired → redirect to login |
+| `403` | No plays remaining |
 
 ---
 
-### 4.3 — GET `/gaming/rewards/`
+### 5.5 — GET `/gaming/rewards/`
 
 **Purpose:** List all reward coupons the player has earned from the game.
-
-**Call when:** Displaying the player's "My Rewards" or "Reward History" screen in the game.
 
 **Request:**
 ```
@@ -320,101 +657,92 @@ GET {BASE_URL}/api/v1/gaming/rewards/
 Authorization: Bearer <jwt>
 ```
 
-**Success Response — HTTP 200:**
-```json
-[
-    {
-        "id": "uuid",
-        "game_type": "spin_wheel",
-        "win_level": "jackpot",
-        "reward_tier_name": "Grand Prize",
-        "coupon": {
-            "code": "GAME-A3XK9P",
-            "discount_type": "percentage",
-            "discount_value": "20.00",
-            "valid_until": "2026-07-13T23:59:59Z",
-            "is_used": false
-        },
-        "whatsapp_sent": true,
-        "whatsapp_delivered": null,
-        "created_at": "2026-06-13T10:23:45Z"
-    }
-]
-```
-
-The player redeems coupons in the **Dwarikas shopping app at checkout** — not in the game itself.
-The game's reward history screen is read-only.
+**Response — HTTP 200:** Array of reward objects (same shape as a single reward below).
 
 ---
 
-### 4.4 — GET `/gaming/rewards/<id>/`
+### 5.6 — GET `/gaming/rewards/<id>/`
 
-**Purpose:** Get details of a single reward.
+**Purpose:** Single reward detail.
 
-**Request:**
 ```
 GET {BASE_URL}/api/v1/gaming/rewards/{reward_uuid}/
 Authorization: Bearer <jwt>
 ```
 
-Response shape is identical to a single item in the list above.
+**Response — HTTP 200:**
+```json
+{
+    "id": "uuid",
+    "game_type": "spin_wheel",
+    "win_level": "jackpot",
+    "reward_tier_name": "Grand Prize",
+    "coupon": {
+        "code": "GAME-A3XK9P",
+        "discount_type": "percentage",
+        "discount_value": "20.00",
+        "valid_until": "2026-07-13T23:59:59Z",
+        "is_used": false
+    },
+    "whatsapp_sent": true,
+    "created_at": "2026-06-13T10:23:45Z"
+}
+```
 
 ---
 
-## 5. Complete Game Flow — Step by Step
+## 6. Complete Game Flow — Step by Step
 
 ```
 APP LAUNCH
     │
-    ├─ Restore session from PlayerPrefs (auto via SDK)
-    │
+    ├─ Restore Supabase session (auto via SDK)
     ├─ Is player logged in?
-    │   ├─ NO  → Show Login Screen → player enters email/password → supabase.Auth.SignIn()
-    │   └─ YES → Go to Game Lobby
+    │   ├─ NO  → Login Screen → SignIn() → SetLevelPlayUserId()
+    │   └─ YES → SetLevelPlayUserId() → Game Lobby
     │
 GAME LOBBY
     │
     ├─ Call GET /gaming/earn/
+    ├─ Call GET /gaming/ad-status/         (parallel with earn/)
     │
-    ├─ plays_remaining > 0 ?
-    │   ├─ NO  → Show "No plays left — shop on Dwarikas to earn more!" banner
-    │   └─ YES → Show "You have N plays!" + "Play Now" button (enabled)
+    ├─ Render lobby:
+    │   ├─ "You have {total_plays_remaining} plays"
+    │   ├─ [Play Now]     → enabled if total_plays_remaining > 0
+    │   └─ [Watch Ad ▶]  → enabled if can_watch_ad = true
+    │                        greyed out if can_watch_ad = false
+    │                        shows "Resets at {resets_at}" when capped
+    │
+PLAYER TAPS "WATCH AD"
+    │
+    ├─ AdManager.ShowRewardedAdAsync()
+    │   ├─ GET /gaming/ad-status/  → confirm still available
+    │   ├─ Show rewarded video
+    │   ├─ OnAdRewarded → POST /gaming/grant-ad-play/
+    │   └─ 200 OK → animate "+1 Play!" → refresh lobby count
     │
 PLAYER TAPS "PLAY NOW"
     │
-    ├─ Generate game_session_id = System.Guid.NewGuid().ToString()
-    ├─ Store game_session_id for use after the game
+    ├─ game_session_id = Guid.NewGuid().ToString()   ← generate BEFORE game runs
+    ├─ Store game_session_id in PlayerPrefs (crash safety)
+    ├─ Run game animation / logic
     │
-    ├─ Run the game animation / logic (spin, scratch, quiz, etc.)
+GAME OUTCOME DETERMINED
     │
-    ├─ Determine outcome:
-    │   ├─ WIN  → set won = true, determine win_level (e.g., "jackpot", "silver")
-    │   └─ LOSS → set won = false, win_level = null
+    ├─ WIN  → won=true, win_level = "jackpot" / "silver" / etc.
+    │          POST /gaming/record-play/ → show Win Screen (no ad)
     │
-REPORT OUTCOME TO BACKEND
-    │
-    ├─ Call POST /gaming/record-play/ with { game_session_id, game_type, won, win_level }
-    │
-    ├─ HTTP 200, won = true  → Show Win Screen with coupon_code
-    │                          Show coupon details (discount, valid until)
-    │                          Show "Check your WhatsApp!" message
-    │                          Show "Go to Dwarikas app to redeem" CTA
-    │
-    ├─ HTTP 200, won = false → Show "Better luck next time!" screen
-    │                          Show plays_remaining count
-    │
-    ├─ HTTP 403              → Show "You have no more plays" screen
-    │                          (Edge case: plays exhausted between /earn/ and /record-play/)
-    │
-    └─ HTTP 4xx / Network    → Show "Something went wrong" + Retry button
-                               (Retry is safe — game_session_id deduplication prevents double-spend)
+    └─ LOSS → won=false
+               POST /gaming/record-play/ → show Loss Screen (2 sec)
+               AdManager.ShowInterstitialAfterLoss()
+               OnInterstitialClosed → return to Lobby
 ```
 
 ---
 
-## 6. C# Code Samples
+## 7. C# Code Samples
 
-### Helper: Dwarikas API Client
+### Dwarikas API Client (full)
 
 ```csharp
 using System;
@@ -425,7 +753,7 @@ using UnityEngine.Networking;
 
 public class DwarikasApiClient
 {
-    private readonly string _baseUrl;
+    private readonly string    _baseUrl;
     private readonly Func<string> _getToken;
 
     public DwarikasApiClient(string baseUrl, Func<string> getToken)
@@ -434,104 +762,155 @@ public class DwarikasApiClient
         _getToken = getToken;
     }
 
-    // ─── GET /gaming/earn/ ──────────────────────────────────────────────────
+    // ── GET /gaming/earn/ ────────────────────────────────────────────────────
 
     public async Task<PlaysResponse> GetPlaysAsync()
     {
         var req = UnityWebRequest.Get($"{_baseUrl}/api/v1/gaming/earn/");
         req.SetRequestHeader("Authorization", $"Bearer {_getToken()}");
-
         await req.SendWebRequest();
-
-        if (req.responseCode == 401)
-            throw new UnauthorizedException();
-
-        if (req.result != UnityWebRequest.Result.Success)
-            throw new ApiException((int)req.responseCode, req.error);
-
+        ThrowOnError(req);
         return JsonUtility.FromJson<PlaysResponse>(req.downloadHandler.text);
     }
 
-    // ─── POST /gaming/record-play/ ──────────────────────────────────────────
+    // ── GET /gaming/ad-status/ ───────────────────────────────────────────────
 
-    public async Task<RecordPlayResponse> RecordPlayAsync(RecordPlayRequest payload)
+    public async Task<AdStatusResponse> GetAdStatusAsync()
     {
-        string json = JsonUtility.ToJson(payload);
-        byte[] body = Encoding.UTF8.GetBytes(json);
+        var req = UnityWebRequest.Get($"{_baseUrl}/api/v1/gaming/ad-status/");
+        req.SetRequestHeader("Authorization", $"Bearer {_getToken()}");
+        await req.SendWebRequest();
+        ThrowOnError(req);
+        return JsonUtility.FromJson<AdStatusResponse>(req.downloadHandler.text);
+    }
 
-        var req = new UnityWebRequest($"{_baseUrl}/api/v1/gaming/record-play/", "POST");
-        req.uploadHandler   = new UploadHandlerRaw(body);
+    // ── POST /gaming/grant-ad-play/ ──────────────────────────────────────────
+
+    public async Task<GrantAdPlayResponse> GrantAdPlayAsync(string adUnitId)
+    {
+        var payload = JsonUtility.ToJson(new GrantAdPlayRequest
+        {
+            ad_placement_id = GameBootstrap.Instance.GetComponent<GameConfig>().RewardedPlacementId,
+            ad_unit_id      = adUnitId,
+        });
+
+        var req = new UnityWebRequest($"{_baseUrl}/api/v1/gaming/grant-ad-play/", "POST");
+        req.uploadHandler   = new UploadHandlerRaw(Encoding.UTF8.GetBytes(payload));
         req.downloadHandler = new DownloadHandlerBuffer();
         req.SetRequestHeader("Authorization", $"Bearer {_getToken()}");
         req.SetRequestHeader("Content-Type",  "application/json");
 
         await req.SendWebRequest();
 
-        if (req.responseCode == 401) throw new UnauthorizedException();
         if (req.responseCode == 403) throw new NoPlaysRemainingException();
+        ThrowOnError(req);
 
-        if (req.result != UnityWebRequest.Result.Success)
-            throw new ApiException((int)req.responseCode, req.error);
+        return JsonUtility.FromJson<GrantAdPlayResponse>(req.downloadHandler.text);
+    }
+
+    // ── POST /gaming/record-play/ ────────────────────────────────────────────
+
+    public async Task<RecordPlayResponse> RecordPlayAsync(RecordPlayRequest payload)
+    {
+        string json = JsonUtility.ToJson(payload);
+        var req = new UnityWebRequest($"{_baseUrl}/api/v1/gaming/record-play/", "POST");
+        req.uploadHandler   = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Authorization", $"Bearer {_getToken()}");
+        req.SetRequestHeader("Content-Type",  "application/json");
+
+        await req.SendWebRequest();
+
+        if (req.responseCode == 403) throw new NoPlaysRemainingException();
+        ThrowOnError(req);
 
         return JsonUtility.FromJson<RecordPlayResponse>(req.downloadHandler.text);
     }
 
-    // ─── GET /gaming/rewards/ ───────────────────────────────────────────────
+    // ── GET /gaming/rewards/ ─────────────────────────────────────────────────
 
-    public async Task<RewardListResponse> GetRewardsAsync()
+    public async Task<Reward[]> GetRewardsAsync()
     {
         var req = UnityWebRequest.Get($"{_baseUrl}/api/v1/gaming/rewards/");
         req.SetRequestHeader("Authorization", $"Bearer {_getToken()}");
-
         await req.SendWebRequest();
+        ThrowOnError(req);
+        // Unity's JsonUtility doesn't support root arrays — wrap in a helper
+        return JsonHelper.FromJsonArray<Reward>(req.downloadHandler.text);
+    }
 
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ThrowOnError(UnityWebRequest req)
+    {
         if (req.responseCode == 401) throw new UnauthorizedException();
         if (req.result != UnityWebRequest.Result.Success)
             throw new ApiException((int)req.responseCode, req.error);
-
-        return JsonUtility.FromJson<RewardListResponse>(req.downloadHandler.text);
     }
 }
 ```
 
-### Data Transfer Objects (C#)
+### Data Transfer Objects
 
 ```csharp
-// ─── Request / Response models ──────────────────────────────────────────────
-
-[Serializable]
-public class PlaysResponse
+// ─── Plays ──────────────────────────────────────────────────────────────────
+[Serializable] public class PlaysResponse
 {
     public string user_id;
-    public int    plays_earned;
-    public int    plays_used;
-    public int    plays_remaining;
+    public int    order_plays_remaining;
+    public int    ad_plays_remaining_today;
+    public int    ad_plays_limit_per_day;
+    public int    total_plays_remaining;
     public string plays_calculation;
 }
 
-[Serializable]
-public class RecordPlayRequest
+// ─── Ad Status ──────────────────────────────────────────────────────────────
+[Serializable] public class AdStatusResponse
+{
+    public bool   can_watch_ad;
+    public int    ad_plays_granted_today;
+    public int    ad_plays_remaining_today;
+    public int    ad_plays_limit_per_day;
+    public string resets_at;
+}
+
+// ─── Grant Ad Play ──────────────────────────────────────────────────────────
+[Serializable] public class GrantAdPlayRequest
+{
+    public string ad_placement_id;
+    public string ad_unit_id;
+}
+
+[Serializable] public class GrantAdPlayResponse
+{
+    public bool   granted;
+    public int    ad_plays_remaining_today;
+    public int    total_plays_remaining;
+    public string resets_at;
+}
+
+// ─── Record Play ─────────────────────────────────────────────────────────────
+[Serializable] public class RecordPlayRequest
 {
     public string game_session_id;
     public string game_type;
     public bool   won;
-    public string win_level;   // null if lost
+    public string win_level;
 }
 
-[Serializable]
-public class RecordPlayResponse
+[Serializable] public class RecordPlayResponse
 {
     public string play_id;
     public int    plays_remaining;
     public bool   won;
-    public string coupon_code;              // null if lost
-    public string coupon_discount_type;     // null if lost
-    public string coupon_discount_value;    // null if lost
-    public string coupon_valid_until;       // null if lost
+    public string coupon_code;
+    public string coupon_discount_type;
+    public string coupon_discount_value;
+    public string coupon_valid_until;
 }
 
-[Serializable]
-public class RewardCoupon
+// ─── Rewards ─────────────────────────────────────────────────────────────────
+[Serializable] public class RewardCoupon
 {
     public string code;
     public string discount_type;
@@ -540,8 +919,7 @@ public class RewardCoupon
     public bool   is_used;
 }
 
-[Serializable]
-public class Reward
+[Serializable] public class Reward
 {
     public string       id;
     public string       game_type;
@@ -551,145 +929,37 @@ public class Reward
     public string       created_at;
 }
 
-[Serializable]
-public class RewardListResponse
-{
-    public Reward[] rewards;  // parse with a wrapper if needed
-}
-
-// ─── Custom exceptions ───────────────────────────────────────────────────────
-
-public class UnauthorizedException    : Exception { }
+// ─── Exceptions ──────────────────────────────────────────────────────────────
+public class UnauthorizedException     : Exception { }
 public class NoPlaysRemainingException : Exception { }
 public class ApiException : Exception
 {
-    public int StatusCode { get; }
+    public int StatusCode;
     public ApiException(int code, string msg) : base(msg) { StatusCode = code; }
 }
-```
 
-### Game Manager: Full Play Loop
-
-```csharp
-public class GameManager : MonoBehaviour
+// ─── Array helper (Unity JsonUtility workaround) ─────────────────────────────
+public static class JsonHelper
 {
-    [SerializeField] private GameConfig  config;
-    [SerializeField] private LobbyScreen lobbyScreen;
-    [SerializeField] private WinScreen   winScreen;
-    [SerializeField] private LossScreen  lossScreen;
-
-    private DwarikasApiClient _api;
-
-    void Start()
+    public static T[] FromJsonArray<T>(string json)
     {
-        _api = new DwarikasApiClient(
-            config.DwarikasApiBaseUrl,
-            () => SupabaseManager.Instance.AccessToken
-        );
-        _ = LoadLobbyAsync();
+        string wrapped = $"{{\"array\":{json}}}";
+        var wrapper = JsonUtility.FromJson<Wrapper<T>>(wrapped);
+        return wrapper.array;
     }
-
-    // ── Step 1: Load lobby ───────────────────────────────────────────────────
-
-    async Task LoadLobbyAsync()
-    {
-        try
-        {
-            var plays = await _api.GetPlaysAsync();
-            lobbyScreen.Show(plays.plays_remaining, plays.plays_earned);
-        }
-        catch (UnauthorizedException)
-        {
-            SceneManager.LoadScene("LoginScene");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"Failed to load plays: {ex.Message}");
-            lobbyScreen.ShowError("Could not load your plays. Check your connection.");
-        }
-    }
-
-    // ── Step 2: Player taps Play ─────────────────────────────────────────────
-
-    public async Task OnPlayButtonPressed(string gameType)
-    {
-        // Generate session ID BEFORE the game runs
-        string sessionId = Guid.NewGuid().ToString();
-
-        // Run the game — returns win outcome
-        var outcome = await RunGameAsync(gameType);
-
-        // Report to backend
-        await ReportOutcomeAsync(sessionId, gameType, outcome.Won, outcome.WinLevel);
-    }
-
-    async Task ReportOutcomeAsync(string sessionId, string gameType, bool won, string winLevel)
-    {
-        var payload = new RecordPlayRequest
-        {
-            game_session_id = sessionId,
-            game_type       = gameType,
-            won             = won,
-            win_level       = won ? winLevel : null,
-        };
-
-        try
-        {
-            var result = await _api.RecordPlayAsync(payload);
-
-            if (result.won)
-                winScreen.Show(result.coupon_code, result.coupon_discount_value,
-                               result.coupon_discount_type, result.coupon_valid_until,
-                               result.plays_remaining);
-            else
-                lossScreen.Show(result.plays_remaining);
-        }
-        catch (NoPlaysRemainingException)
-        {
-            lossScreen.ShowNoPlays();
-        }
-        catch (UnauthorizedException)
-        {
-            SceneManager.LoadScene("LoginScene");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"record-play failed: {ex.Message}");
-            // Show retry — see Section 9 for retry safety
-            ShowRetryDialog(payload);
-        }
-    }
-
-    async Task<GameOutcome> RunGameAsync(string gameType)
-    {
-        // ───────────────────────────────────────────────────────────────────
-        // YOUR GAME LOGIC HERE
-        // Run the spin animation, scratch reveal, quiz question, etc.
-        // Determine the outcome on the client side.
-        // Return the win/loss result.
-        // ───────────────────────────────────────────────────────────────────
-        throw new NotImplementedException("Implement game logic here.");
-    }
-}
-
-public class GameOutcome
-{
-    public bool   Won;
-    public string WinLevel;  // e.g., "jackpot", "silver", "bronze" — null if lost
+    [Serializable] private class Wrapper<T> { public T[] array; }
 }
 ```
 
 ---
 
-## 7. Game Types and Win Levels
+## 8. Game Types and Win Levels
 
-The `game_type` and `win_level` strings you send in `record-play` **must match** what the
-Dwarikas manager team has configured in the reward tier table. Mismatched strings result in
-`won=true` being recorded (the play is consumed) but **no coupon being issued** — so get
-these values right.
+The `game_type` and `win_level` strings sent in `record-play` **must exactly match**
+what the Dwarikas manager team has configured in the reward tier table.
+A mismatch means the play is consumed but **no coupon is issued** (the play is wasted).
 
-**Coordinate with the backend / product team** before development. As a reference, expected
-values are:
+**Confirm these values with the backend/product team before implementing game logic.**
 
 ### Supported `game_type` values
 
@@ -699,7 +969,7 @@ values are:
 | `scratch_card` | Scratch card |
 | `quiz` | Trivia / quiz challenge |
 
-### Example `win_level` values per game type
+### Example `win_level` values
 
 | `game_type` | `win_level` | Example prize |
 |---|---|---|
@@ -707,107 +977,115 @@ values are:
 | `spin_wheel` | `silver` | 10% off |
 | `spin_wheel` | `bronze` | 5% off |
 | `scratch_card` | `jackpot` | ₹100 off |
-| `scratch_card` | `any` | Wildcard — matches any unrecognised win level |
 | `quiz` | `perfect_score` | 15% off |
 | `quiz` | `pass` | 5% off |
 
-> The backend supports an `any` wildcard for `win_level`. If no exact match is found, the backend
-> falls back to the `any` tier for that `game_type`. Coordinate with the product team on which
-> tiers should be configured.
+> **Wildcard:** The backend supports `win_level = "any"` as a fallback tier. If your
+> `win_level` string doesn't match any exact tier, the backend falls back to `"any"`.
 
 ---
 
-## 8. Error Handling Reference
+## 9. Error Handling Reference
 
 | HTTP Code | Scenario | Recommended UI |
 |---|---|---|
 | `200` + `won: true` | Win — coupon issued | Show win screen with `coupon_code` |
-| `200` + `won: false` | Loss — play consumed | Show loss screen with plays remaining |
-| `200` + `won: true` + `coupon_code: null` | Win but no reward tier configured | Show "You won but no prize is configured yet — please contact support" |
-| `400` | Bad request payload | Log internally. Show generic error. Do not retry with same payload. |
-| `401` | JWT expired or missing | Redirect to login screen |
-| `403` | No plays remaining | Show "No plays left" screen — don't retry |
-| `5xx` / Network failure | Server error or no connection | Show retry button — safe to retry with same `game_session_id` |
+| `200` + `won: false` | Loss — play consumed | Show loss screen + interstitial |
+| `200` + `won: true` + `coupon_code: null` | Win but no reward tier configured | "You won — prize coming soon!" |
+| `200` + `granted: true` | Ad play granted | "+1 Play!" animation, update count |
+| `400` | Bad payload | Log internally, show generic error |
+| `401` | JWT expired | Redirect to login screen immediately |
+| `403` from `record-play` | No plays remaining | Show "No plays left" screen |
+| `403` from `grant-ad-play` | Daily ad cap reached | "Come back tomorrow" with reset time |
+| `5xx` / Network | Server error or offline | Show retry button (see Section 10) |
 
 ---
 
-## 9. Network Retry and Idempotency
+## 10. Network Retry and Idempotency
 
-The `game_session_id` field is the key safety mechanism for retries.
+### `record-play/` — Safe to Retry
 
-**Generate the session ID once, before each play:**
+Generate the `game_session_id` **once, before the game runs**, and persist it:
+
 ```csharp
-// Generate BEFORE running the game, store it
+// Generate before the game starts
 string sessionId = Guid.NewGuid().ToString();
-```
 
-**On network failure, retry with the same `game_session_id`:**
-```csharp
-// Safe to call multiple times with the same sessionId
-// The backend will return the same result and will NOT double-deduct a play
-await _api.RecordPlayAsync(new RecordPlayRequest {
-    game_session_id = sessionId,   // same ID as before
-    game_type       = gameType,
-    won             = won,
-    win_level       = winLevel,
-});
-```
-
-The backend stores `game_session_id` with a UNIQUE constraint. If it receives the same ID twice,
-it returns the original result without creating a new record. This means:
-- ✅ Retry after network timeout is always safe
-- ✅ App crash and restart is safe
-- ✅ Player cannot spin twice by force-quitting the app
-
-**Persist the session ID in PlayerPrefs before calling the API**, so it survives app crashes:
-```csharp
-PlayerPrefs.SetString("pending_game_session_id", sessionId);
+// Persist immediately (crash safety)
+PlayerPrefs.SetString("pending_session_id", sessionId);
 PlayerPrefs.Save();
 
-// After successful API response, clear it
-PlayerPrefs.DeleteKey("pending_game_session_id");
+// After successful API response:
+PlayerPrefs.DeleteKey("pending_session_id");
 ```
 
-On next app launch, check if a `pending_game_session_id` exists and complete the pending call
-before showing the lobby.
+On network failure, retry with the **same** `game_session_id`. The backend's UNIQUE
+constraint on `game_session_id` means it will return the original result without
+double-deducting a play or double-issuing a coupon.
+
+**On next app launch**, check for a pending session and complete it before showing the lobby:
+
+```csharp
+string pendingId = PlayerPrefs.GetString("pending_session_id", null);
+if (!string.IsNullOrEmpty(pendingId))
+    await CompletePendingPlayAsync(pendingId);
+```
+
+### `grant-ad-play/` — Not Retry-Safe
+
+Do **not** retry `grant-ad-play/` on network failure — the daily cap is the safety
+mechanism here. If the call fails, the player can simply watch another ad (they haven't
+been charged a play).
 
 ---
 
-## 10. Testing Against the Backend
+## 11. Testing Against the Backend
 
 ### Test Accounts
 
-The backend team will provide test Supabase accounts with pre-seeded completed orders so the test
-users have plays available. Use these during development — do not use real customer accounts.
+The backend team will provide Supabase test accounts with pre-seeded completed orders
+so test users have plays available from the start.
 
-### Staging Environment
+### Environments
 
 | Environment | Base URL |
 |---|---|
-| Staging | `https://staging-api.dwarikas.com` *(to be provided)* |
-| Production | `https://api.dwarikas.com` *(to be provided)* |
+| Staging | *(to be provided by backend team)* |
+| Production | `https://api.dwarikas.com` |
 
-Use Staging for all development and QA testing. Never test with production credentials.
+**Always use Staging for development and QA.**
 
 ### Simulating Edge Cases
 
 | Scenario | How to test |
 |---|---|
-| No plays remaining | Use a test account that has consumed all plays, or call `/gaming/record-play/` until `plays_remaining` hits 0 |
-| Duplicate session ID | Call `/gaming/record-play/` twice with the same `game_session_id` — second call should return the original result |
-| JWT expiry | Wait for token to expire (1 hour by default), then call any endpoint — should get 401 |
-| Win with no matching tier | Send a `win_level` not configured by the manager team — response will have `won: true` but `coupon_code: null` |
+| No order plays | Use a fresh test account with no orders |
+| Ad cap reached | Call `grant-ad-play/` 5 times — 6th should return 403 |
+| Ad cap resets | Check `resets_at` field; verify count resets at midnight IST |
+| Duplicate session | Call `record-play/` twice with same `game_session_id` — should return same result |
+| JWT expiry | Wait 1 hour, then call any endpoint — should get 401 |
+| No matching reward tier | Send `win_level: "nonexistent"` — `coupon_code` will be null |
 
-### Manual API Testing (curl / Postman)
+### Manual Testing with curl
 
 ```bash
-# 1. Get plays
-curl -X GET https://staging-api.dwarikas.com/api/v1/gaming/earn/ \
-  -H "Authorization: Bearer <your_jwt>"
+# Check plays and ad quota
+curl -X GET "https://staging.api.dwarikas.com/api/v1/gaming/earn/" \
+  -H "Authorization: Bearer <jwt>"
 
-# 2. Record a win
-curl -X POST https://staging-api.dwarikas.com/api/v1/gaming/record-play/ \
-  -H "Authorization: Bearer <your_jwt>" \
+# Check ad status only
+curl -X GET "https://staging.api.dwarikas.com/api/v1/gaming/ad-status/" \
+  -H "Authorization: Bearer <jwt>"
+
+# Grant ad play (simulate OnAdRewarded)
+curl -X POST "https://staging.api.dwarikas.com/api/v1/gaming/grant-ad-play/" \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{ "ad_placement_id": "Rewarded_Android", "ad_unit_id": "test_unit" }'
+
+# Record a win
+curl -X POST "https://staging.api.dwarikas.com/api/v1/gaming/record-play/" \
+  -H "Authorization: Bearer <jwt>" \
   -H "Content-Type: application/json" \
   -d '{
     "game_session_id": "test-session-001",
@@ -816,64 +1094,86 @@ curl -X POST https://staging-api.dwarikas.com/api/v1/gaming/record-play/ \
     "win_level": "jackpot"
   }'
 
-# 3. Record a loss
-curl -X POST https://staging-api.dwarikas.com/api/v1/gaming/record-play/ \
-  -H "Authorization: Bearer <your_jwt>" \
+# Record a loss
+curl -X POST "https://staging.api.dwarikas.com/api/v1/gaming/record-play/" \
+  -H "Authorization: Bearer <jwt>" \
   -H "Content-Type: application/json" \
   -d '{
     "game_session_id": "test-session-002",
     "game_type": "spin_wheel",
     "won": false
   }'
-
-# 4. List all rewards
-curl -X GET https://staging-api.dwarikas.com/api/v1/gaming/rewards/ \
-  -H "Authorization: Bearer <your_jwt>"
 ```
 
 ---
 
-## 11. UI/UX Guidelines
-
-### Win Screen — Required Elements
-
-When `won=true` in the response, show:
-
-- 🎉 Celebration animation / confetti
-- Prize name (from `reward_tier_name` if you call `/gaming/rewards/`) or generic "You Won!"
-- **Coupon code** — displayed prominently, easy to copy (`coupon_code`)
-- Discount summary: e.g., "20% off your next order" (`coupon_discount_value` + `coupon_discount_type`)
-- Validity: "Valid until 13 Jul 2026" (`coupon_valid_until`)
-- WhatsApp message: "We've also sent this code to your WhatsApp"
-- CTA button: **"Open Dwarikas App to Redeem"** — this should deep-link to the Dwarikas shopping app
-
-### Loss Screen — Required Elements
-
-- A friendly message — avoid negative language (e.g., "Almost!" or "Keep trying!")
-- Remaining plays count: "You have N plays left"
-- If plays = 0: "Shop on Dwarikas to earn more plays" — with a deep link to the shopping app
+## 12. UI/UX Guidelines
 
 ### Lobby Screen — Required Elements
 
-- Player's name / avatar (from Supabase user profile)
-- Current play count: "You have N plays"
-- If plays = 0: Disable "Play Now" button and show earn message
-- "My Rewards" button → navigate to reward history screen
+| Element | Logic |
+|---|---|
+| Play count | "You have **{total_plays_remaining}** plays" — show prominently |
+| Play source breakdown | "({order_plays_remaining} from orders + {ad_plays_remaining_today} free today)" |
+| **Play Now** button | Active if `total_plays_remaining > 0`; disabled (greyed) if 0 |
+| **Watch Ad ▶** button | Active if `can_watch_ad = true`; greyed + "Resets at {time}" if false |
+| Shop CTA | "Shop to earn more plays" with deep link to Dwarikas app — always visible |
+
+### Watch Ad Button States
+
+```
+┌─────────────────────────────┐
+│  ▶  Watch Ad — Earn a Play  │   ← Active state (can_watch_ad = true)
+│     3 free plays left today │
+└─────────────────────────────┘
+
+┌─────────────────────────────┐
+│  ▶  Watch Ad  (greyed out)  │   ← Capped state (can_watch_ad = false)
+│  Free plays reset at 12:00  │
+└─────────────────────────────┘
+```
+
+### Win Screen — Required Elements
+
+- 🎉 Celebration animation / confetti (make it feel premium)
+- Prize tier name (e.g., "Grand Prize!")
+- Coupon code — large, easy to read, tap-to-copy: `GAME-A3XK9P`
+- Discount summary: "20% off your next Dwarikas order"
+- Validity: "Valid until 13 Jul 2026"
+- WhatsApp confirmation: "We've also sent this to your WhatsApp"
+- CTA button: **"Open Dwarikas App to Redeem"** — deep link to checkout
+- **Do NOT show an interstitial ad on the win screen**
+
+### Loss Screen — Required Elements
+
+- Friendly message (e.g., "Almost! Try again?")
+- Remaining plays: "You have {plays_remaining} plays left"
+- If `plays_remaining == 0` and `can_watch_ad == true` → "Watch an ad for a free play!"
+- Show the loss screen for **at least 2 seconds** before the interstitial fires
+- After interstitial closes → return to lobby automatically
+
+### Ad Flow UX
+
+- Show a brief loading state while the rewarded ad loads ("Loading your reward…")
+- If ad fails to load, show: "Ad not available right now. Try again in a moment."
+- After watching a full ad, animate "+1 Play!" badge on the play counter before updating
+- Never interrupt gameplay mid-spin/mid-scratch with an ad
 
 ### Reward History Screen
 
 - List all items from `GET /gaming/rewards/`
-- Show coupon code, discount, game type, date won
-- Show whether coupon is `is_used: true` (greyed out) or available (highlighted)
-- Remind player to redeem in the Dwarikas app
+- Show coupon code, discount type, game type, and date won
+- Mark used coupons (`is_used: true`) as greyed/strikethrough
+- CTA: "Open Dwarikas App to redeem" for each unused coupon
 
 ---
 
-## Questions?
+## Questions & Contact
 
 Contact the Dwarikas backend team for:
-- Supabase credentials and project URL
+- Supabase project URL and anon key
+- LevelPlay App Key and Placement IDs
 - Staging API base URL
-- Configured `game_type` and `win_level` values for your reward tiers
 - Test accounts with pre-seeded plays
+- Configured `game_type` and `win_level` values for reward tiers
 - Any changes to the API contract
