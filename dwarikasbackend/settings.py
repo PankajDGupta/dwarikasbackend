@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'pos.apps.PosConfig',             # Spec #18 — POS Cash Sales & In-Store Bill Generation
     'promotions.apps.PromotionsConfig', # Spec #19 — Promotions & Discounts
     'coupons.apps.CouponsConfig',     # Spec #20 — Coupon Code Creation & Application
+    'gaming.apps.GamingConfig',       # Spec #21 — Gaming Engine Integration & Coupon Rewards
 ]
 
 

@@ -21,5 +21,6 @@ urlpatterns = [
     path('api/v1/', include('pos.urls')),         # Spec #18 — POS Cash Sales & In-Store Bill Generation
     path('api/v1/', include('promotions.urls')),  # Spec #19 — Promotions & Discounts
     path('api/v1/', include('coupons.urls')),     # Spec #20 — Coupon Code Creation & Application
+    path('api/v1/', include('gaming.urls')),      # Spec #21 — Gaming Engine Integration & Coupon Rewards
 ]
 

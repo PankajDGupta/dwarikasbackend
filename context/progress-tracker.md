@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #20: Coupon Code Creation & Application — **Complete**
+- Spec #21: Gaming Engine Integration & Coupon Rewards — **Complete**
  
 ## Current Goal
  
-- Implement Gaming Engine Integration & Coupon Rewards (Spec #21)
+- Implement Smart Discount Suggestions Engine (Spec #22)
 
 
 
@@ -236,6 +236,16 @@ Update this file after every meaningful implementation change.
   - Added 9 comprehensive unit and integration tests (validations, stacking constraints, user limits, payment sync, and concurrent race-condition prevention) with 100% test pass rate.
   - **Completed:** 2026-06-12T23:40:00+05:30
 
+- ✅ Spec #21 - Gaming Engine Integration & Coupon Rewards (`gaming/`)
+  - Created Django `gaming/` app and registered it in `INSTALLED_APPS` and test runner `MANAGED_APPS`.
+  - Defined unmanaged models `RewardTier`, `GamePlay`, and `GameReward` mapped to Supabase tables.
+  - Implemented play quota logic calculating remaining plays from order history and ad watch counts (daily ad limit cap of 5).
+  - Created REST views and serializers for play quota (`earn/`), ad watch status (`ad-status/`), client-side ad play claims (`grant-ad-play/`), play recordings (`record-play/`), user rewards list/details, and manager reward tier configurations.
+  - Implemented exact win level matching with wildcard fallback and integrated coupon issuance with WhatsApp notifications.
+  - Added 7 comprehensive unit/integration test cases validating permissions, quota updates, daily reset limits, win/loss coupon flows, and data isolation.
+  - **Completed:** 2026-06-13T14:40:00+05:30
+
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -260,7 +270,7 @@ Update this file after every meaningful implementation change.
 | 18 | POS Cash Sales & In-Store Bill Generation | `pos/` | ✅ Complete |
 | 19 | Promotions & Discounts | `promotions/` | ✅ Complete |
 | 20 | Coupon Code Creation & Application | `coupons/` | ✅ Complete |
-| 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | 🔲 Not started — spec written 2026-06-06 |
+| 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | ✅ Complete — 2026-06-13 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | 🔲 Not started — spec written 2026-06-07 |
 | 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | 🔲 Not started — spec written 2026-06-07 |
@@ -268,7 +278,7 @@ Update this file after every meaningful implementation change.
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #21 — Gaming Engine Integration & Coupon Rewards.
+**Next immediate step:** Execute Spec #22 — Smart Discount Suggestions Engine.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

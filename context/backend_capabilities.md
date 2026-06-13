@@ -1827,6 +1827,203 @@ Removes the applied coupon from the active reservation and deletes the pending `
 
 ---
 
+#### 5.17 Gaming Engine Integration & Coupon Rewards (Spec #21)
+
+##### `GET /api/v1/gaming/earn/` — Get Play Quota
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Returns play quota statistics for the user, including order-derived plays and ad-watch-derived plays.
+
+**Response (200):**
+```json
+{
+  "user_id": "00000000-0000-0000-0000-000000000001",
+  "order_plays_earned": 12,
+  "order_plays_used": 10,
+  "order_plays_remaining": 2,
+  "ad_plays_granted_today": 2,
+  "ad_plays_remaining_today": 3,
+  "ad_plays_limit_per_day": 5,
+  "ad_plays_available_to_play": 1,
+  "total_plays_remaining": 3,
+  "plays_calculation": "1 play per confirmed order + up to 5 ad plays per day"
+}
+```
+
+##### `POST /api/v1/gaming/record-play/` — Record Game Play
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Consumes a play slot and records a game session. On win, generates a coupon reward and optionally sends WhatsApp message.
+
+**Request Body:**
+```json
+{
+  "game_session_id": "session-unique-guid",
+  "game_type": "spin_wheel",
+  "won": true,
+  "win_level": "jackpot"
+}
+```
+
+**Response (200 - Win):**
+```json
+{
+  "play_id": "uuid-of-play",
+  "plays_remaining": 2,
+  "won": true,
+  "coupon_code": "GAME-XXXX",
+  "coupon_discount_type": "percentage",
+  "coupon_discount_value": "25.00",
+  "coupon_valid_until": "2026-07-20"
+}
+```
+
+**Response (200 - Loss):**
+```json
+{
+  "play_id": "uuid-of-play",
+  "plays_remaining": 2,
+  "won": false,
+  "coupon_code": null
+}
+```
+
+##### `GET /api/v1/gaming/ad-status/` — Get Rewarded Ad Quota Status
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Returns whether the user can watch a rewarded ad to earn a free play.
+
+**Response (200):**
+```json
+{
+  "can_watch_ad": true,
+  "ad_plays_granted_today": 2,
+  "ad_plays_remaining_today": 3,
+  "ad_plays_limit_per_day": 5,
+  "resets_at": "2026-06-14T00:00:00+00:00"
+}
+```
+
+##### `POST /api/v1/gaming/grant-ad-play/` — Grant Ad-powered Free Play
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Called after watching a rewarded ad to grant +1 play. Enforces the daily cap of 5.
+
+**Request Body:**
+```json
+{
+  "ad_placement_id": "Rewarded_Android",
+  "ad_unit_id": "abc123"
+}
+```
+
+**Response (200 - Granted):**
+```json
+{
+  "granted": true,
+  "ad_plays_granted_today": 3,
+  "ad_plays_remaining_today": 2,
+  "total_plays_remaining": 4
+}
+```
+
+**Response (403 - Daily Limit Reached):**
+```json
+{
+  "granted": false,
+  "detail": "Daily ad play limit reached. Come back tomorrow!",
+  "resets_at": "2026-06-14T00:00:00+00:00"
+}
+```
+
+##### `GET /api/v1/gaming/rewards/` — List User Rewards
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` |
+
+Lists all gaming rewards won by the calling user.
+
+**Response (200):**
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "reward-uuid",
+      "game_type": "spin_wheel",
+      "win_level": "jackpot",
+      "reward_tier_name": "Grand Prize",
+      "coupon": {
+        "id": "coupon-uuid",
+        "code": "GAME-ABC123",
+        "description": "Grand Prize reward from gaming",
+        "discount_type": "percentage",
+        "discount_value": "25.00",
+        "max_discount_cap": "50.00",
+        "min_order_value": null,
+        "max_uses": 1,
+        "uses_per_user": 1,
+        "specific_user_id": "user-uuid",
+        "is_active": true,
+        "valid_from": "2026-06-13T14:40:00Z",
+        "valid_until": "2026-07-13T14:40:00Z",
+        "created_by": "service-account-uuid",
+        "created_at": "2026-06-13T14:40:00Z",
+        "source": "gaming_reward"
+      },
+      "whatsapp_sent": true,
+      "whatsapp_delivered": null,
+      "created_at": "2026-06-13T14:40:00Z"
+    }
+  ]
+}
+```
+
+##### `GET /api/v1/gaming/rewards/<uuid:id>/` — Reward Detail
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsAuthenticated` (owner-isolated) |
+
+Returns details of a single reward won by the user.
+
+##### `GET /api/v1/gaming/reward-tiers/` — List Reward Tiers
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+Lists all configured reward tiers.
+
+##### `POST /api/v1/gaming/reward-tiers/` — Create Reward Tier
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+##### `PATCH /api/v1/gaming/reward-tiers/<uuid:id>/` — Update Reward Tier
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+---
+
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -1892,6 +2089,7 @@ Some endpoints include additional context fields:
 | #18 | POS Cash Sales & In-Store Billing | `pos/cart/`, `pos/cart/<id>/`, `pos/cart/<id>/items/`, `pos/cart/<id>/confirm/`, `pos/bill/<order_id>/` |
 | #19 | Promotions & Discounts | `promotions/`, `promotions/<id>/`, `promotions/active/`, `promotions/<id>/items/`, `promotions/<id>/share/whatsapp/` |
 | #20 | Coupon Code Creation & Application | `coupons/`, `coupons/<id>/`, `coupons/validate/<code>/`, `checkout/apply-coupon/`, `checkout/remove-coupon/<reservation_id>/` |
+| #21 | Gaming Engine Integration & Coupon Rewards | `gaming/earn/`, `gaming/record-play/`, `gaming/ad-status/`, `gaming/grant-ad-play/`, `gaming/rewards/`, `gaming/rewards/<id>/`, `gaming/reward-tiers/`, `gaming/reward-tiers/<id>/` |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
 
  
@@ -2004,6 +2202,18 @@ POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/            → Revoke external 
 # ── Security Hardening & Rate Limiting (Completed) ──────────────────────────
 GET     /api/v1/health/                                    → Service liveness health check
 POST    /api/v1/auth/logout/                               → Revoke session token (logout)
+
+# ── Gaming Engine Integration & Coupon Rewards (Spec #21 — Completed) ────────────
+GET     /api/v1/gaming/earn/                               → Get play quota (order & ad based)
+POST    /api/v1/gaming/record-play/                        → Consume play and generate win coupon reward
+GET     /api/v1/gaming/ad-status/                          → Get rewarded ad watch quota status
+POST    /api/v1/gaming/grant-ad-play/                      → Grant play after ad watch completion
+GET     /api/v1/gaming/rewards/                            → List user's earned rewards
+GET     /api/v1/gaming/rewards/<uuid:id>/                  → Detail of a user's earned reward
+GET     /api/v1/gaming/reward-tiers/                       → List reward tier configurations (Manager only)
+POST    /api/v1/gaming/reward-tiers/                       → Create reward tier configuration (Manager only)
+GET     /api/v1/gaming/reward-tiers/<uuid:id>/             → Retrieve reward tier configuration (Manager only)
+PATCH   /api/v1/gaming/reward-tiers/<uuid:id>/             → Update reward tier configuration (Manager only)
 
 # ── Amazon SP-API Marketplace Listing (Spec #23 — planned) ──────────────────
 POST    /api/v1/amazon/listings/sync/                      → Trigger one-click Amazon listing submission

@@ -58,7 +58,7 @@ ONDC Seller Node Core: Implements the required Beckn Protocol schemas to nativel
 
 WhatsApp Commerce Engine: Integrates with the WhatsApp Business API to allow conversational catalog search and real-time inventory queries directly over message threads.
 
-Gaming Engine Integration: Connects with an external gaming engine via a secure HMAC-verified webhook. When a customer wins a game, the backend automatically issues a single-use reward coupon and delivers it via WhatsApp. Managers configure reward tiers that map win levels to coupon values.
+Gaming Engine Integration: Connects with a first-party Unity mobile game using the same Supabase Auth JWT. The game client checks play quotas (earned via completed orders or ad watches) and records plays directly. Supports ad-watch monetization (rewarded ads) using Unity LevelPlay and client-side claims with a daily cap of 5 ad plays. Winners receive single-use reward coupons and optional WhatsApp notifications. Managers configure reward tiers that map win levels to coupon values.
 
 ### Promotions & Loyalty Engine
 Time-Bound Promotional Discounts: Managers create promotions (percentage or flat-amount discounts) scoped to specific products or variants. Active promotions surface automatically on the customer storefront and are enforced server-side at checkout — the effective discounted price is locked into the reservation to prevent client-side manipulation.
