@@ -343,7 +343,32 @@ Audit log of WhatsApp broadcast attempts to customers.
 | `discount_applied` | decimal(12,2) | Final calculated discount amount |
 | `redeemed_at` | datetime | ISO 8601 redemption timestamp |
 
+#### 4.15 DiscountSuggestion *(Spec #22)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `variant` | nested object | Full ProductVariant object (on reads) |
+| `discount_score` | integer | Composite score (0-100) |
+| `priority` | enum | `critical`, `high`, `medium` |
+| `reason_summary` | string | Human-readable explanation of score |
+| `reasons` | object | Score breakdown details |
+| `suggested_discount_type` | enum | `percentage`, `flat_amount` |
+| `suggested_discount_value` | decimal(10,2) | Auto-suggested discount value |
+| `suggested_ends_days` | integer | Suggested promotion duration in days |
+| `current_stock` | integer | Stock quantity snapshot during analysis |
+| `avg_monthly_sales` | decimal(10,2) | Average monthly sales trailing 90 days |
+| `days_since_last_order` | integer | Days since last completed order for variant |
+| `cost_price` | decimal(12,2) | Unit cost price from latest confirmed invoice |
+| `margin_pct` | decimal(5,2) | Calculated gross margin percentage |
+| `status` | enum | `pending`, `approved`, `dismissed`, `expired` |
+| `dismissed_until` | datetime | Snooze deadline after dismissal |
+| `approved_promotion` | UUID (FK) | Reference to created Promotion if approved |
+| `analysed_at` | datetime | When this suggestion was last computed |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+
 ---
+
 
 
 ### 5. API Endpoints
@@ -2024,6 +2049,138 @@ Lists all configured reward tiers.
 
 ---
 
+#### 5.13 Smart Discount Suggestions Engine (Spec #22)
+
+##### `GET /api/v1/promotions/suggestions/` — List Suggestions
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+| **Pagination** | Yes |
+
+**Filter Parameters:**
+- `priority` (string: `critical` | `high` | `medium`)
+
+**Response (200):**
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "suggestion-uuid",
+      "variant": {
+        "id": "variant-uuid",
+        "sku": "DW-RICE-1KG",
+        "retail_price": "100.00",
+        "stock_quantity": 50,
+        "product": {
+          "name": "Test Rice",
+          "category": "Grocery"
+        }
+      },
+      "discount_score": 85,
+      "priority": "critical",
+      "reason_summary": "High stock & low sales",
+      "reasons": {
+        "stock_score": 80,
+        "recency_score": 90
+      },
+      "suggested_discount_type": "percentage",
+      "suggested_discount_value": "20.00",
+      "suggested_ends_days": 7,
+      "current_stock": 50,
+      "avg_monthly_sales": "2.50",
+      "days_since_last_order": 45,
+      "cost_price": "50.00",
+      "margin_pct": "50.00",
+      "status": "pending",
+      "dismissed_until": null,
+      "approved_promotion": null,
+      "analysed_at": "2026-06-14T13:30:00Z",
+      "created_at": "2026-06-14T13:30:00Z"
+    }
+  ]
+}
+```
+
+##### `GET /api/v1/promotions/suggestions/<uuid:id>/` — Suggestion Detail
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Response (200):** Specific suggestion object.
+
+##### `POST /api/v1/promotions/suggestions/<uuid:id>/approve/` — Approve Suggestion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Request Body (Optional overrides):**
+```json
+{
+  "title": "Clearance Sale — 20% Off",
+  "ends_days": 7,
+  "discount_value": 20.00
+}
+```
+
+**Response (201):**
+```json
+{
+  "suggestion_id": "suggestion-uuid",
+  "promotion_id": "promotion-uuid",
+  "title": "Clearance Sale — 20% Off",
+  "discount_type": "percentage",
+  "discount_value": "20.00",
+  "starts_at": "2026-06-14T13:30:00Z",
+  "ends_at": "2026-06-21T13:30:00Z",
+  "message": "Promotion is now live."
+}
+```
+
+##### `POST /api/v1/promotions/suggestions/<uuid:id>/dismiss/` — Dismiss Suggestion
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Request Body (Optional snooze duration):**
+```json
+{
+  "snooze_days": 30
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Suggestion dismissed for 30 days."
+}
+```
+
+##### `POST /api/v1/tasks/run-discount-analysis/` — Run Background Job
+
+| Property | Value |
+|---|---|
+| **Auth** | Internal check (Cloud Tasks OIDC / debug mode) |
+
+**Response (200):**
+```json
+{
+  "status": "ok",
+  "new_suggestions": 1,
+  "updated_suggestions": 0,
+  "expired_suggestions": 0
+}
+```
+
+---
+
+
 ### 6. Standard Error Response Format
 
 All error responses follow this shape:
@@ -2090,7 +2247,9 @@ Some endpoints include additional context fields:
 | #19 | Promotions & Discounts | `promotions/`, `promotions/<id>/`, `promotions/active/`, `promotions/<id>/items/`, `promotions/<id>/share/whatsapp/` |
 | #20 | Coupon Code Creation & Application | `coupons/`, `coupons/<id>/`, `coupons/validate/<code>/`, `checkout/apply-coupon/`, `checkout/remove-coupon/<reservation_id>/` |
 | #21 | Gaming Engine Integration & Coupon Rewards | `gaming/earn/`, `gaming/record-play/`, `gaming/ad-status/`, `gaming/grant-ad-play/`, `gaming/rewards/`, `gaming/rewards/<id>/`, `gaming/reward-tiers/`, `gaming/reward-tiers/<id>/` |
+| #22 | Smart Discount Suggestions Engine | `promotions/suggestions/`, `promotions/suggestions/<id>/`, `promotions/suggestions/<id>/approve/`, `promotions/suggestions/<id>/dismiss/` |
 | #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
+
 
  
 ---
@@ -2197,7 +2356,7 @@ POST    /api/v1/external/inventory/sync/                   → Reconcile ERP inv
 PATCH   /api/v1/external/shipments/update/                 → Update shipment status from logistics webhook
 GET     /api/v1/admin/api-keys/                            → List external partner API keys (Manager only)
 POST    /api/v1/admin/api-keys/                            → Create external partner API key (Manager only)
-POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/            → Revoke external partner API key (Manager only)
+POST    /api/v1/admin/api-keys/<uuid:pk>/revoke/           → Revoke external partner API key (Manager only)
 
 # ── Security Hardening & Rate Limiting (Completed) ──────────────────────────
 GET     /api/v1/health/                                    → Service liveness health check
@@ -2214,6 +2373,13 @@ GET     /api/v1/gaming/reward-tiers/                       → List reward tier 
 POST    /api/v1/gaming/reward-tiers/                       → Create reward tier configuration (Manager only)
 GET     /api/v1/gaming/reward-tiers/<uuid:id>/             → Retrieve reward tier configuration (Manager only)
 PATCH   /api/v1/gaming/reward-tiers/<uuid:id>/             → Update reward tier configuration (Manager only)
+
+# ── Smart Discount Suggestions Engine (Completed) ────────────────────────
+GET     /api/v1/promotions/suggestions/                    → List pending discount suggestions (Manager only)
+GET     /api/v1/promotions/suggestions/<uuid:id>/          → Retrieve specific discount suggestion (Manager only)
+POST    /api/v1/promotions/suggestions/<uuid:id>/approve/  → Approve suggestion to create a live promotion (Manager only)
+POST    /api/v1/promotions/suggestions/<uuid:id>/dismiss/  → Dismiss suggestion (snooze) (Manager only)
+POST    /api/v1/tasks/run-discount-analysis/               → Trigger background analytics job (Cloud Tasks only)
 
 # ── Amazon SP-API Marketplace Listing (Spec #23 — planned) ──────────────────
 POST    /api/v1/amazon/listings/sync/                      → Trigger one-click Amazon listing submission

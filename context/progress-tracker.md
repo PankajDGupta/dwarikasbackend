@@ -4,11 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #21: Gaming Engine Integration & Coupon Rewards — **Complete**
+- Spec #22: Smart Discount Suggestions Engine — **Complete**
  
 ## Current Goal
  
-- Implement Smart Discount Suggestions Engine (Spec #22)
+- Implement Amazon SP-API One-Click Product Listing (Spec #23)
+
 
 
 
@@ -245,6 +246,15 @@ Update this file after every meaningful implementation change.
   - Added 7 comprehensive unit/integration test cases validating permissions, quota updates, daily reset limits, win/loss coupon flows, and data isolation.
   - **Completed:** 2026-06-13T14:40:00+05:30
 
+- ✅ Spec #22 - Smart Discount Suggestions Engine (`promotions/`)
+  - Created `discount_suggestions` database table, unique index, and performance index.
+  - Implemented scoring metrics in `promotions/analytics_service.py` using composite signals (stock level, sales velocity, abandonment rate, margin headroom).
+  - Exposed manager-only REST views for listing suggestions, retrieval, one-click promotion creation (supporting overrides), and dismissal.
+  - Built internal background task trigger `/tasks/run-discount-analysis/` secured by task headers.
+  - Added 12 comprehensive unit and integration test cases covering the complete execution lifecycle with 100% test pass rate.
+  - **Completed:** 2026-06-14T13:30:00+05:30
+
+
 
 ## Next Up
 
@@ -271,14 +281,14 @@ Update this file after every meaningful implementation change.
 | 19 | Promotions & Discounts | `promotions/` | ✅ Complete |
 | 20 | Coupon Code Creation & Application | `coupons/` | ✅ Complete |
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | ✅ Complete — 2026-06-13 |
-| 22 | Smart Discount Suggestions Engine | `promotions/` | 🔲 Not started — spec written 2026-06-07 |
+| 22 | Smart Discount Suggestions Engine | `promotions/` | ✅ Complete — 2026-06-14 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | 🔲 Not started — spec written 2026-06-07 |
 | 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | 🔲 Not started — spec written 2026-06-07 |
 | 24b | Local Frontend–Backend Integration Test | frontend + all apps | 🔲 Not started — spec written 2026-06-07 |
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #22 — Smart Discount Suggestions Engine.
+**Next immediate step:** Execute Spec #23 — Amazon SP-API One-Click Product Listing.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

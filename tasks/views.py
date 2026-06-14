@@ -4,11 +4,16 @@ These are never called by frontend clients — only by the Cloud Tasks service.
 """
 import json
 import mimetypes
+from django.conf import settings
 from django.db import transaction
 from django.http import JsonResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
 
 from inventory.models import PurchaseInvoice, InvoiceLineItem
 from inventory.gcs_service import _get_client as get_gcs_client
@@ -131,3 +136,30 @@ class ProcessInvoiceTaskView(View):
             'line_items_extracted': len(extracted.line_items),
             'needs_review_count': sum(1 for i in extracted.line_items if i.needs_review),
         }, status=200)
+
+
+class RunDiscountAnalysisView(APIView):
+    """
+    POST /api/v1/tasks/run-discount-analysis/
+
+    Internal Cloud Tasks endpoint — triggered by Cloud Scheduler nightly.
+    Not accessible from the internet (Cloud Tasks adds a verified task header).
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        task_name = request.headers.get('X-CloudTasks-TaskName', '')
+        if not task_name and not settings.DEBUG:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        from promotions.analytics_service import run_discount_analysis
+        result = run_discount_analysis()
+
+        return Response({
+            'status': 'ok',
+            'new_suggestions': result['new'],
+            'updated_suggestions': result['updated'],
+            'expired_suggestions': result['expired'],
+        })
+

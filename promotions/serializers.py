@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from promotions.models import Promotion, PromotionItem
+from promotions.models import Promotion, PromotionItem, DiscountSuggestion
 
 
 from inventory.models import Product, ProductVariant
@@ -41,3 +41,39 @@ class PromotionSerializer(serializers.ModelSerializer):
 
     def get_is_live(self, obj):
         return obj.is_currently_live()
+
+
+class SuggestionProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['name', 'category']
+
+
+class SuggestionVariantSerializer(serializers.ModelSerializer):
+    product = SuggestionProductSerializer(read_only=True)
+
+    class Meta:
+        model = ProductVariant
+        fields = ['id', 'sku', 'retail_price', 'stock_quantity', 'product']
+
+
+class DiscountSuggestionSerializer(serializers.ModelSerializer):
+    variant = SuggestionVariantSerializer(read_only=True)
+
+    class Meta:
+        model = DiscountSuggestion
+        fields = [
+            'id', 'variant', 'discount_score', 'priority', 'reason_summary', 'reasons',
+            'suggested_discount_type', 'suggested_discount_value', 'suggested_ends_days',
+            'current_stock', 'avg_monthly_sales', 'days_since_last_order',
+            'cost_price', 'margin_pct', 'status', 'dismissed_until',
+            'approved_promotion', 'analysed_at', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'variant', 'discount_score', 'priority', 'reason_summary', 'reasons',
+            'suggested_discount_type', 'suggested_discount_value', 'suggested_ends_days',
+            'current_stock', 'avg_monthly_sales', 'days_since_last_order',
+            'cost_price', 'margin_pct', 'status', 'dismissed_until',
+            'approved_promotion', 'analysed_at', 'created_at',
+        ]
+

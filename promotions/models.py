@@ -100,3 +100,64 @@ class PromotionBroadcast(models.Model):
 
     def __str__(self):
         return f"Broadcast({self.phone_number}, status={self.status})"
+
+
+class DiscountSuggestion(models.Model):
+    PRIORITY_CHOICES = [
+        ('critical', 'Critical'),
+        ('high', 'High'),
+        ('medium', 'Medium'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('dismissed', 'Dismissed'),
+        ('expired', 'Expired'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    variant = models.ForeignKey(
+        'inventory.ProductVariant',
+        on_delete=models.CASCADE,
+        related_name='discount_suggestions',
+        db_column='variant_id',
+    )
+    product = models.ForeignKey(
+        'inventory.Product',
+        on_delete=models.CASCADE,
+        related_name='discount_suggestions',
+        db_column='product_id',
+    )
+    discount_score = models.IntegerField()
+    priority = models.TextField(choices=PRIORITY_CHOICES)
+    reason_summary = models.TextField()
+    reasons = models.JSONField(default=dict)
+    suggested_discount_type = models.TextField()
+    suggested_discount_value = models.DecimalField(max_digits=10, decimal_places=2)
+    suggested_ends_days = models.IntegerField(default=14)
+    current_stock = models.IntegerField()
+    avg_monthly_sales = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    days_since_last_order = models.IntegerField(null=True, blank=True)
+    cost_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    margin_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    status = models.TextField(choices=STATUS_CHOICES, default='pending')
+    dismissed_until = models.DateTimeField(null=True, blank=True)
+    approved_promotion = models.ForeignKey(
+        'promotions.Promotion',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='approved_promotion_id',
+        related_name='source_suggestion',
+    )
+    analysed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'discount_suggestions'
+        ordering = ['-discount_score', '-analysed_at']
+
+    def __str__(self):
+        return f"DiscountSuggestion({self.id}, score={self.discount_score}, status={self.status})"
+
