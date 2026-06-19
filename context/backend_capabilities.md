@@ -367,7 +367,40 @@ Audit log of WhatsApp broadcast attempts to customers.
 | `analysed_at` | datetime | When this suggestion was last computed |
 | `created_at` | datetime | ISO 8601 creation timestamp |
 
+#### 4.16 AmazonCredentials *(Spec #23)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `seller_id` | string | Amazon Seller Central ID (unique) |
+| `lwa_client_id` | string | Login with Amazon client ID |
+| `lwa_client_secret` | string | LWA client secret |
+| `lwa_refresh_token` | string | Ephemeral auth refresh token |
+| `region` | enum | SP-API regional endpoint key (`NA`, `EU`, `FE`) |
+| `primary_marketplace_id` | string | Primary marketplace ID (e.g. `A21TJRUUN4KGV` for India) |
+| `authorized_at` | datetime | ISO 8601 authorization timestamp |
+| `updated_at` | datetime | ISO 8601 update timestamp |
+
+#### 4.17 AmazonListing *(Spec #23)*
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `product_id` | UUID (FK) | Core product relation reference |
+| `sku` | string | Matches core product SKU (unique) |
+| `asin` | string | Assigned Amazon Standard Identification Number (nullable) |
+| `marketplace_id` | string | Target marketplace ID |
+| `sync_status` | enum | `PENDING`, `SUBMITTED`, `ACTIVE`, `INVALID`, `ERROR`, `SUPPRESSED` |
+| `submission_id` | UUID | putListingsItem SP-API submission GUID (nullable) |
+| `validation_issues` | array | List of validation issue descriptions (JSONB) |
+| `price_synced` | decimal(10,2)| Latest price uploaded to Amazon (nullable) |
+| `quantity_synced` | integer | Latest quantity uploaded to Amazon |
+| `last_synced_at` | datetime | ISO 8601 synchronisation completion timestamp |
+| `created_at` | datetime | ISO 8601 creation timestamp |
+| `updated_at` | datetime | ISO 8601 update timestamp |
+
 ---
+
 
 
 
@@ -2381,7 +2414,7 @@ POST    /api/v1/promotions/suggestions/<uuid:id>/approve/  → Approve suggestio
 POST    /api/v1/promotions/suggestions/<uuid:id>/dismiss/  → Dismiss suggestion (snooze) (Manager only)
 POST    /api/v1/tasks/run-discount-analysis/               → Trigger background analytics job (Cloud Tasks only)
 
-# ── Amazon SP-API Marketplace Listing (Spec #23 — planned) ──────────────────
+# ── Amazon SP-API Marketplace Listing (Spec #23 — Completed) ──────────────────
 POST    /api/v1/amazon/listings/sync/                      → Trigger one-click Amazon listing submission
 GET     /api/v1/amazon/listings/<uuid:product_id>/status/  → Listing sync status poll
 POST    /api/v1/amazon/webhooks/sqs-receiver/              → Amazon SNS/SQS status event receiver

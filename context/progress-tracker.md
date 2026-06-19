@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #22: Smart Discount Suggestions Engine — **Complete**
+- Spec #23: Amazon SP-API One-Click Product Listing — **Complete**
  
 ## Current Goal
  
-- Implement Amazon SP-API One-Click Product Listing (Spec #23)
+- Implement Blinkit & JioMart One-Click Product Listing (Spec #24)
 
 
 
@@ -256,6 +256,19 @@ Update this file after every meaningful implementation change.
 
 
 
+- ✅ Spec #23 - Amazon SP-API One-Click Product Listing (`amazon/`)
+  - Created unmanaged Django models `AmazonCredentials` and `AmazonListing` mapped to public Supabase tables.
+  - Implemented `amazon/lwa_client.py` for Login with Amazon token exchange and local cache buffering.
+  - Developed `amazon/sp_api_client.py` PUT wrapper supporting token bucket rate limiting (5 RPS) and exponential backoff queues.
+  - Created `amazon/sns_verifier.py` to authenticate incoming AWS SNS requests with domain constraints.
+  - Implemented `amazon/sqs_processor.py` for background status resolution and mapping status states.
+  - Added REST APIs for trigger sync (`POST /sync/`), status polling (`GET /status/`), and SNS webhook receipt (`POST /sqs-receiver/`) along with permission classes.
+  - Configured state-only migrations and applied DDL script to the local Supabase stack.
+  - Added 11 comprehensive unit and integration test cases covering the complete execution lifecycle with 100% test pass rate.
+  - **Completed:** 2026-06-19T20:57:16+05:30
+
+
+
 ## Next Up
 
 ### Full Feature Spec Roadmap (Specs 04–19)
@@ -282,13 +295,13 @@ Update this file after every meaningful implementation change.
 | 20 | Coupon Code Creation & Application | `coupons/` | ✅ Complete |
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | ✅ Complete — 2026-06-13 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | ✅ Complete — 2026-06-14 |
-| 23 | Amazon SP-API One-Click Product Listing | `amazon/` | 🔲 Not started — spec written 2026-06-07 |
+| 23 | Amazon SP-API One-Click Product Listing | `amazon/` | ✅ Complete — 2026-06-19 |
 | 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | 🔲 Not started — spec written 2026-06-07 |
 | 24b | Local Frontend–Backend Integration Test | frontend + all apps | 🔲 Not started — spec written 2026-06-07 |
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #23 — Amazon SP-API One-Click Product Listing.
+**Next immediate step:** Execute Spec #24 — Blinkit & JioMart One-Click Product Listing.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

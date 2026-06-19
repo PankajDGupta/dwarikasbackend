@@ -420,6 +420,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_discount_suggestion_active_variant
 
 CREATE INDEX IF NOT EXISTS idx_discount_suggestions_status_score
     ON public.discount_suggestions (status, discount_score DESC);
+
+-- Amazon Selling Partner credentials table (Spec #23)
+CREATE TYPE amazon_region_enum AS ENUM ('NA', 'EU', 'FE');
+
+CREATE TABLE IF NOT EXISTS public.amazon_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id VARCHAR(255) NOT NULL UNIQUE,
+    lwa_client_id VARCHAR(255) NOT NULL,
+    lwa_client_secret TEXT NOT NULL,
+    lwa_refresh_token TEXT NOT NULL,
+    region amazon_region_enum NOT NULL DEFAULT 'EU',
+    primary_marketplace_id VARCHAR(50) NOT NULL,
+    authorized_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Amazon listings status sync table (Spec #23)
+CREATE TYPE listing_sync_status_enum AS ENUM (
+    'PENDING', 'SUBMITTED', 'ACTIVE', 'INVALID', 'ERROR', 'SUPPRESSED'
+);
+
+CREATE TABLE IF NOT EXISTS public.amazon_listings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+    sku VARCHAR(100) NOT NULL UNIQUE,
+    asin VARCHAR(10) NULL,
+    marketplace_id VARCHAR(50) NOT NULL,
+    sync_status listing_sync_status_enum NOT NULL DEFAULT 'PENDING',
+    submission_id UUID NULL,
+    validation_issues JSONB DEFAULT '[]'::jsonb,
+    price_synced NUMERIC(10, 2) NULL,
+    quantity_synced INTEGER DEFAULT 0,
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_amazon_listings_sku ON public.amazon_listings(sku);
+CREATE INDEX IF NOT EXISTS idx_amazon_listings_product ON public.amazon_listings(product_id);
+
+ALTER TABLE public.amazon_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.amazon_listings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY admin_full_access ON public.amazon_credentials
+    FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+
+CREATE POLICY staff_admin_listing_access ON public.amazon_listings
+    FOR ALL USING (auth.jwt() ->> 'role' IN ('admin', 'staff'));
 ```,StartLine:206,TargetContent:
 ```
 
