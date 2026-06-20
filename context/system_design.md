@@ -468,6 +468,112 @@ CREATE POLICY admin_full_access ON public.amazon_credentials
 
 CREATE POLICY staff_admin_listing_access ON public.amazon_listings
     FOR ALL USING (auth.jwt() ->> 'role' IN ('admin', 'staff'));
+
+-- Quick-Commerce Platform Registry (Spec #24)
+CREATE TYPE qc_platform_enum AS ENUM ('blinkit', 'jiomart');
+
+CREATE TYPE qc_listing_status_enum AS ENUM (
+    'DRAFT',
+    'VALIDATING',
+    'SUBMITTED',
+    'PENDING_REVIEW',
+    'ACTIVE',
+    'INACTIVE',
+    'REJECTED',
+    'ERROR'
+);
+
+CREATE TABLE IF NOT EXISTS public.qc_platform_listings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+    variant_id UUID REFERENCES public.product_variants(id) ON DELETE SET NULL,
+    platform qc_platform_enum NOT NULL,
+    platform_sku TEXT,
+    platform_upc TEXT,
+    asin_equivalent TEXT,
+    sync_status qc_listing_status_enum NOT NULL DEFAULT 'DRAFT',
+    trace_id TEXT,
+    submission_guid UUID,
+    validation_issues JSONB DEFAULT '[]'::jsonb,
+    mrp_snapshot NUMERIC(10, 2),
+    selling_price_snapshot NUMERIC(10, 2),
+    fssai_license TEXT,
+    barcode_validated BOOLEAN DEFAULT FALSE,
+    image_validated BOOLEAN DEFAULT FALSE,
+    last_synced_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_qc_listings_product ON public.qc_platform_listings(product_id);
+CREATE INDEX IF NOT EXISTS idx_qc_listings_platform_sku ON public.qc_platform_listings(platform, platform_sku);
+CREATE INDEX IF NOT EXISTS idx_qc_listings_status ON public.qc_platform_listings(sync_status);
+
+CREATE TABLE IF NOT EXISTS public.qc_platform_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    platform qc_platform_enum NOT NULL UNIQUE,
+    fynd_username TEXT,
+    fynd_access_token TEXT,
+    fynd_token_expires_at TIMESTAMPTZ,
+    blinkit_vendor_id TEXT,
+    blinkit_receiver_code TEXT,
+    blinkit_webhook_secret TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.qc_warehouse_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    platform qc_platform_enum NOT NULL,
+    internal_facility_code TEXT NOT NULL,
+    platform_location_id TEXT NOT NULL,
+    mapping_type TEXT NOT NULL CHECK (mapping_type IN ('facility', 'pincode')),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_wh_platform_location
+    ON public.qc_warehouse_mappings(platform, platform_location_id);
+
+CREATE TYPE qc_po_status_enum AS ENUM (
+    'RECEIVED', 'VERIFIED', 'DISPATCHED', 'ASN_SENT', 'INWARDED', 'CANCELLED'
+);
+
+CREATE TABLE IF NOT EXISTS public.qc_purchase_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    platform qc_platform_enum NOT NULL,
+    platform_po_id TEXT NOT NULL UNIQUE,
+    vendor_id TEXT,
+    facility_code TEXT,
+    po_status qc_po_status_enum NOT NULL DEFAULT 'RECEIVED',
+    total_amount NUMERIC(12, 2),
+    asn_reference TEXT,
+    raw_payload JSONB,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    dispatched_at TIMESTAMPTZ,
+    inwarded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.qc_po_line_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    po_id UUID NOT NULL REFERENCES public.qc_purchase_orders(id) ON DELETE CASCADE,
+    variant_id UUID REFERENCES public.product_variants(id) ON DELETE SET NULL,
+    platform_sku TEXT NOT NULL,
+    ordered_quantity INTEGER NOT NULL CHECK (ordered_quantity > 0),
+    delivered_quantity INTEGER DEFAULT 0 CHECK (delivered_quantity >= 0),
+    unit_price NUMERIC(10, 2),
+    mrp NUMERIC(10, 2)
+);
+
+ALTER TABLE public.qc_platform_listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.qc_platform_credentials ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY qc_staff_admin_access ON public.qc_platform_listings
+    FOR ALL USING (auth.jwt() ->> 'role' IN ('staff', 'manager'));
+
+CREATE POLICY qc_manager_only ON public.qc_platform_credentials
+    FOR ALL USING (auth.jwt() ->> 'role' = 'manager');
 ```,StartLine:206,TargetContent:
 ```
 

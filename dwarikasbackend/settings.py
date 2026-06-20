@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'coupons.apps.CouponsConfig',     # Spec #20 — Coupon Code Creation & Application
     'gaming.apps.GamingConfig',       # Spec #21 — Gaming Engine Integration & Coupon Rewards
     'amazon.apps.AmazonConfig',       # Spec #23 — Amazon SP-API One-Click Product Listing
+    'quickcommerce.apps.QuickcommerceConfig', # Spec #24 — Blinkit & JioMart One-Click Product Listing
 ]
 
 

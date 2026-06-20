@@ -140,3 +140,5 @@ Operational Metrics: Tracks On-Time In-Full (OTIF) rate, Fill Rate (FR), and Inv
 - Oversell Elimination: When 50 concurrent virtual threads attempt to check out the last remaining unit of an item, the database processes only 1 transaction successfully while rejecting the remaining 49 with an "Out of Stock" state, preventing any database inconsistencies.
 
 - Hands-Free Ingestion Accuracy: Scanned bill PDFs uploaded by staff consistently extract vendor details, SKUs, and quantities with an accuracy rate exceeding 95%—flagging low-confidence OCR reads to the exception validation UI rather than writing unverified data.
+
+- Hyperlocal Fulfillment Integrity: Real-time pre-flight listing validation completes in under 500ms. JioMart batch submissions accept payloads and return trace IDs asynchronously within 2 seconds. Blinkit catalog matching and B2B PO ingestion run atomically, blocking shipping or Advanced Shipping Note (ASN) generation on any MRP discrepancies to preserve brand margin. Operational KPIs (OTIF rate ≥ 95%, Fill Rate ≥ 98%, IDM ≤ 2%) are tracked continuously in the metrics dashboard.

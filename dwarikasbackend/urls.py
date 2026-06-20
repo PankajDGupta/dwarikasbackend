@@ -23,5 +23,6 @@ urlpatterns = [
     path('api/v1/', include('coupons.urls')),     # Spec #20 — Coupon Code Creation & Application
     path('api/v1/', include('gaming.urls')),      # Spec #21 — Gaming Engine Integration & Coupon Rewards
     path('api/v1/', include('amazon.urls')),      # Spec #23 — Amazon SP-API One-Click Product Listing
+    path('api/v1/', include('quickcommerce.urls')), # Spec #24 — Blinkit & JioMart One-Click Product Listing
 ]
 

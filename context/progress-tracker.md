@@ -267,6 +267,17 @@ Update this file after every meaningful implementation change.
   - Added 11 comprehensive unit and integration test cases covering the complete execution lifecycle with 100% test pass rate.
   - **Completed:** 2026-06-19T20:57:16+05:30
 
+- ✅ Spec #24 - Blinkit & JioMart One-Click Product Listing (`quickcommerce/`)
+  - Created unmanaged Django models `QCPlatformListing`, `QCPlatformCredentials`, `QCWarehouseMapping`, `QCPurchaseOrder`, and `QCPOLineItem` mapped to public Supabase tables.
+  - Implemented `validation_engine.py` verifying EAN-13 barcodes, FSSAI 14-digit licenses, price parity (price <= MRP), shelf life, and MOQ restrictions.
+  - Developed `schema_normalizer.py` transforming master product/variant fields into JioMart's nested parent-child JSON structure or Blinkit template columns.
+  - Built JioMart async batch creation pipeline using Reliance's Fynd Konnect UAT endpoints with non-blocking Cloud Tasks `trace_id` status polling.
+  - Built Blinkit pipeline supporting semantic EAN catalog matching for direct linking and template compilation (CSV/Excel) for new catalog items.
+  - Implemented Blinkit B2B PO webhook receiver (with pincode-to-warehouse mapping, cryptographic signature verification, and strict MRP block safeguards).
+  - Implemented Advanced Shipping Note (ASN) generator and JioMart marketplace shipping integration (manifest closure webhook).
+  - Formulated automated performance calculators for OTIF Rate, Fill Rate, and Inventory Discrepancy Margin (IDM) exposed via a Manager-only metrics endpoint.
+  - Added 19 comprehensive test cases covering the complete lifecycle from pre-flight validation to fulfillment metrics.
+  - **Completed:** 2026-06-20T19:40:00+05:30
 
 
 ## Next Up
@@ -296,12 +307,12 @@ Update this file after every meaningful implementation change.
 | 21 | Gaming Engine Integration & Coupon Rewards | `gaming/` | ✅ Complete — 2026-06-13 |
 | 22 | Smart Discount Suggestions Engine | `promotions/` | ✅ Complete — 2026-06-14 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | ✅ Complete — 2026-06-19 |
-| 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | 🔲 Not started — spec written 2026-06-07 |
+| 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | ✅ Complete — 2026-06-20 |
 | 24b | Local Frontend–Backend Integration Test | frontend + all apps | 🔲 Not started — spec written 2026-06-07 |
 | 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
 | 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
 
-**Next immediate step:** Execute Spec #24 — Blinkit & JioMart One-Click Product Listing.
+**Next immediate step:** Execute Spec #24b — Local Frontend–Backend Integration Test.
 ## Open Questions
 
 - Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?

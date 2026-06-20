@@ -1255,6 +1255,244 @@ Receives `LISTINGS_ITEM_STATUS_CHANGE` and `LISTINGS_ITEM_ISSUES_CHANGE` events 
  
 ---
 
+#### 5.11b Quick-Commerce Channel Integration — Blinkit & JioMart (Spec #24)
+
+This module enables store administrators to list products on Blinkit and JioMart with a single click.
+
+##### `POST /api/v1/quickcommerce/listings/sync/` — Trigger One-Click Listing
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "product_id": "b1ca2914-75dd-11ea-bc55-0242ac130003",
+  "platforms": ["jiomart", "blinkit"],
+  "fssai_license": "10012345000001",
+  "marketplace_config": {
+    "jiomart": {
+      "location_ids": ["jiomartLocationId1"]
+    },
+    "blinkit": {
+      "vendor_id": "BLK-VND-001",
+      "pincodes": ["560067"],
+      "has_catalog_match": true
+    }
+  }
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "product_id": "b1ca2914-75dd-11ea-bc55-0242ac130003",
+  "results": {
+    "jiomart": {
+      "status": "SUBMITTED",
+      "trace_id": "7f4a2d88-0c23-4b11-9e12-abc123456789",
+      "message": "Batch accepted by Fynd Konnect. Polling for COMPLETED status."
+    },
+    "blinkit": {
+      "status": "ACTIVE",
+      "matched_upc": "8901234567890",
+      "message": "Product matched to existing Blinkit catalog. Inventory sync enabled."
+    }
+  },
+  "validation_warnings": []
+}
+```
+
+---
+
+##### `GET /api/v1/quickcommerce/listings/{product_id}/status/` — Listing Status Check
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Response (200 OK):**
+```json
+{
+  "product_id": "b1ca2914-75dd-11ea-bc55-0242ac130003",
+  "listings": [
+    {
+      "platform": "jiomart",
+      "platform_sku": "DW-RICE-1KG",
+      "sync_status": "ACTIVE",
+      "trace_id": "7f4a2d88-0c23-4b11-9e12-abc123456789",
+      "last_synced_at": "2026-06-07T10:45:00Z",
+      "validation_issues": []
+    },
+    {
+      "platform": "blinkit",
+      "platform_sku": "DW-RICE-1KG",
+      "platform_upc": "8901234567890",
+      "sync_status": "PENDING_REVIEW",
+      "submission_guid": "a1b2c3d4-...",
+      "last_synced_at": "2026-06-07T10:45:00Z",
+      "validation_issues": []
+    }
+  ]
+}
+```
+
+---
+
+##### `POST /api/v1/quickcommerce/blinkit/webhook/po/` — Blinkit Purchase Order Webhook Receiver
+
+| Property | Value |
+|---|---|
+| **Auth** | Internal (Verified via Blinkit Webhook signature header `X-Blinkit-Signature`) |
+
+**Request Body:**
+```json
+{
+  "event": "PURCHASE_ORDER_CREATED",
+  "po_id": "BLK-PO-20260607-001",
+  "vendor_id": "BLK-VND-001",
+  "items": [
+    {
+      "sku": "DW-RICE-1KG",
+      "upc": "8901234567890",
+      "ordered_quantity": 120,
+      "unit_price": 115.00,
+      "mrp": 135.00
+    }
+  ],
+  "delivery_pincode": "560067",
+  "expected_delivery_date": "2026-06-09"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "VERIFIED",
+  "po_id": "BLK-PO-20260607-001"
+}
+```
+
+---
+
+##### `POST /api/v1/quickcommerce/blinkit/asn/submit/` — Advanced Shipping Note (ASN) Submission
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "po_id": "BLK-PO-20260607-001",
+  "dispatched_items": [
+    {
+      "sku": "DW-RICE-1KG",
+      "dispatched_quantity": 120,
+      "batch_number": "BATCH-2026-0607"
+    }
+  ],
+  "tracking_reference": "DTDC-12345678"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "asn_reference": "ASN-DWR-20260608-001",
+  "po_id": "BLK-PO-20260607-001",
+  "status": "ASN_SENT",
+  "message": "Advanced Shipping Note transmitted to Blinkit dark store successfully."
+}
+```
+
+---
+
+##### `POST /api/v1/quickcommerce/jiomart/webhook/order/` — JioMart Webhook Order Ingestion
+
+| Property | Value |
+|---|---|
+| **Auth** | Internal (verified via JioMart UAT OAuth configuration) |
+
+**Request Body:**
+```json
+{
+  "order_id": "8c59f0f9-2e06-4b95-a228-36c1e95cfc1d",
+  "location_id": "jiomartLocationId1",
+  "total_amount": 1200.00
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "order_id": "8c59f0f9-2e06-4b95-a228-36c1e95cfc1d",
+  "facility_code": "FacilityA",
+  "status": "staged",
+  "shipping_label_url": "https://cdn.jiomart.com/labels/mock-label.pdf"
+}
+```
+
+---
+
+##### `POST /api/v1/quickcommerce/jiomart/manifest/close/` — JioMart Manifest Closure
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsStaffOrManager` |
+
+**Request Body:**
+```json
+{
+  "jiomart_order_id": "8c59f0f9-2e06-4b95-a228-36c1e95cfc1d",
+  "manifest_id": "MFT-20260608-001"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "order_id": "8c59f0f9-2e06-4b95-a228-36c1e95cfc1d",
+  "carrier_status": "picked_up",
+  "tracking_reference": "MFT-20260608-001"
+}
+```
+
+---
+
+##### `GET /api/v1/quickcommerce/metrics/` — Operational Performance Metrics
+
+| Property | Value |
+|---|---|
+| **Auth** | `IsManager` |
+
+**Query Parameters:**
+- `platform` (string: `blinkit` | `jiomart`)
+- `from_date` (date string)
+- `to_date` (date string)
+
+**Response (200 OK):**
+```json
+{
+  "platform": "blinkit",
+  "period": {
+    "from": "2026-06-01",
+    "to": "2026-06-07"
+  },
+  "otif_rate": 96.2,
+  "fill_rate": 98.7,
+  "inventory_discrepancy_margin": 1.3,
+  "total_pos": 48,
+  "on_time_pos": 46,
+  "in_full_pos": 47
+}
+```
+
+---
+
 #### 5.12 Payment Gateway — Razorpay *(Spec #17)*
 
 The payment flow is a **three-step server-driven sequence**. All amounts are computed server-side from the database. The frontend never sends an amount.
@@ -2281,7 +2519,8 @@ Some endpoints include additional context fields:
 | #20 | Coupon Code Creation & Application | `coupons/`, `coupons/<id>/`, `coupons/validate/<code>/`, `checkout/apply-coupon/`, `checkout/remove-coupon/<reservation_id>/` |
 | #21 | Gaming Engine Integration & Coupon Rewards | `gaming/earn/`, `gaming/record-play/`, `gaming/ad-status/`, `gaming/grant-ad-play/`, `gaming/rewards/`, `gaming/rewards/<id>/`, `gaming/reward-tiers/`, `gaming/reward-tiers/<id>/` |
 | #22 | Smart Discount Suggestions Engine | `promotions/suggestions/`, `promotions/suggestions/<id>/`, `promotions/suggestions/<id>/approve/`, `promotions/suggestions/<id>/dismiss/` |
-| #23 | Amazon SP-API One-Click Listing *(spec written)* | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
+| #23 | Amazon SP-API One-Click Listing | `amazon/listings/sync/`, `amazon/listings/<id>/status/`, `amazon/webhooks/sqs-receiver/` |
+| #24 | Blinkit & JioMart One-Click Listing | `quickcommerce/listings/sync/`, `quickcommerce/listings/<id>/status/`, `quickcommerce/blinkit/webhook/po/`, `quickcommerce/blinkit/asn/submit/`, `quickcommerce/jiomart/webhook/order/`, `quickcommerce/jiomart/manifest/close/`, `quickcommerce/metrics/` |
 
 
  
@@ -2418,4 +2657,13 @@ POST    /api/v1/tasks/run-discount-analysis/               → Trigger backgroun
 POST    /api/v1/amazon/listings/sync/                      → Trigger one-click Amazon listing submission
 GET     /api/v1/amazon/listings/<uuid:product_id>/status/  → Listing sync status poll
 POST    /api/v1/amazon/webhooks/sqs-receiver/              → Amazon SNS/SQS status event receiver
+
+# ── Quick-Commerce Listing Integration (Spec #24 — Completed) ─────────────────
+POST    /api/v1/quickcommerce/listings/sync/               → Trigger one-click Blinkit/JioMart listings
+GET     /api/v1/quickcommerce/listings/<uuid:product_id>/status/ → Listings status check
+POST    /api/v1/quickcommerce/blinkit/webhook/po/          → Blinkit B2B PO webhook receiver
+POST    /api/v1/quickcommerce/blinkit/asn/submit/          → Advanced Shipping Note (ASN) submission
+POST    /api/v1/quickcommerce/jiomart/webhook/order/       → JioMart order webhook receiver
+POST    /api/v1/quickcommerce/jiomart/manifest/close/      → JioMart manifest closure
+GET     /api/v1/quickcommerce/metrics/                     → Quick-commerce operational metrics dashboard (Manager only)
 ```
