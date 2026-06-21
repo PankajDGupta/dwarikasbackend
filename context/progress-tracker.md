@@ -4,11 +4,12 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #23: Amazon SP-API One-Click Product Listing — **Complete**
+- Spec #25: Cloud Run Deployment Readiness — **Code-level changes complete; infrastructure provisioning TBD (manual)**
  
 ## Current Goal
  
-- Implement Blinkit & JioMart One-Click Product Listing (Spec #24)
+- Complete Spec #25 infrastructure prerequisites (GCP project, Secret Manager, Supabase prod, Redis)
+- Then execute Spec #26 — Production Deployment Runbook (CI/CD `cloudbuild.yaml`)
 
 
 
@@ -279,6 +280,18 @@ Update this file after every meaningful implementation change.
   - Added 19 comprehensive test cases covering the complete lifecycle from pre-flight validation to fulfillment metrics.
   - **Completed:** 2026-06-20T19:40:00+05:30
 
+- ✅ Spec #25 (Code-Level) — Cloud Run Deployment Readiness — Code Changes
+  - Fixed `Dockerfile`: switched to `uv pip install -r pyproject.toml` so all packages from `pyproject.toml` are installed (10 were previously missing: opencv, numpy, razorpay, django-axes, django-redis, redis, dj-database-url, django-filter, python-barcode, Pillow)
+  - Fixed `Dockerfile`: added `libgl1-mesa-glx` and `libglib2.0-0` runtime libs required by `opencv-python-headless`
+  - Fixed `Dockerfile`: corrected HEALTHCHECK path from `/` (404) to `/api/v1/health/`; bumped `start-period` to 60s
+  - Fixed `Dockerfile`: tuned Gunicorn to `--workers 5` (2 vCPU formula), `--threads 2`, `--max-requests 1000`, `--max-requests-jitter 50`, `--graceful-timeout 30`
+  - Fixed `dwarikasbackend/settings.py`: replaced `CORS_ALLOW_ALL_ORIGINS = True` with env-var-controlled allowlist via `CORS_ALLOWED_ORIGINS`
+  - Added `CLOUD_RUN_SERVICE_URL` setting to `settings.py` (Cloud Tasks self-invocation URL)
+  - Created `supabase/snippets/001_initial_schema.sql` — base schema extracted from `system_design.md` (profiles, products, product_variants, promotions, reservations, orders + RLS + security definer helpers)
+  - Created `.env.example` — complete local dev variable template with Secret Manager annotations for all 29 prod variables
+  - **Completed (code):** 2026-06-21T12:45:00+05:30
+  - **TBD (Manual — Operator):** GCP project + billing + APIs, IAM service accounts, Artifact Registry, Secret Manager (27 secrets), GCS bucket, Cloud Tasks queue, VPC connector, Redis Memorystore, Document AI processor, Supabase prod project + schema apply, manager role setup, external integration onboarding (Razorpay, WhatsApp, Amazon SP-API, ONDC, JioMart/Fynd, Blinkit), Cloud Run Job + Service first deploy
+
 
 ## Next Up
 
@@ -308,18 +321,15 @@ Update this file after every meaningful implementation change.
 | 22 | Smart Discount Suggestions Engine | `promotions/` | ✅ Complete — 2026-06-14 |
 | 23 | Amazon SP-API One-Click Product Listing | `amazon/` | ✅ Complete — 2026-06-19 |
 | 24 | Blinkit & JioMart One-Click Product Listing | `quickcommerce/` | ✅ Complete — 2026-06-20 |
-| 24b | Local Frontend–Backend Integration Test | frontend + all apps | 🔲 Not started — spec written 2026-06-07 |
-| 25 | Cloud Run Deployment Readiness | infra / all apps | 🔲 Not started — spec written 2026-06-07 |
-| 26 | Production Deployment Runbook (CI/CD) | infra | 🔲 Planned — to be written after Spec #25 |
+**Next immediate step:** Complete Spec #25 infrastructure prerequisites (manual GCP/Supabase provisioning), then write and execute Spec #26 — Production Deployment Runbook.
 
-**Next immediate step:** Execute Spec #24b — Local Frontend–Backend Integration Test.
 ## Open Questions
 
-- Should we use gunicorn or another ASGI server (e.g., uvicorn) for async support?
-- How should environment variables be sourced in local dev vs production?
-- Do we need additional Django middleware for request logging and error handling?
-- `CORS_ALLOW_ALL_ORIGINS = True` — when to restrict to explicit origin list?
-- `DATABASE_URL` local dev fallback: should we provide a `.env.example` template?
+- ~~Should we use gunicorn or another ASGI server?~~ **Resolved:** Gunicorn (sync, 5 workers, 2 threads) confirmed for 2 vCPU Cloud Run.
+- ~~How should environment variables be sourced in local dev vs production?~~ **Resolved:** `.env.example` created; production uses Secret Manager → Cloud Run env var injection.
+- ~~Do we need additional Django middleware for request logging and error handling?~~ **Resolved:** Current middleware stack (Axes, JTI, UserAgent, CORS) is production-adequate; structured logging via Gunicorn `--access-logfile -` to stdout (Cloud Logging picks up).
+- ~~`CORS_ALLOW_ALL_ORIGINS = True` — when to restrict?~~ **Resolved:** Fixed — now env-var-controlled via `CORS_ALLOWED_ORIGINS` in `settings.py`.
+- ~~`DATABASE_URL` local dev fallback: should we provide a `.env.example` template?~~ **Resolved:** `.env.example` created at project root.
 - **[Spec 17]** Fee handling strategy: should Dwarikas absorb the ~2% gateway fee on card/net-banking transactions, or pass it to customers as a `convenience_fee` line item? UPI is 0% (RBI mandate) so this only affects card/net-banking. Options:
   - Option A: Absorb silently (current spec behaviour — simplest UX)
   - Option B: Pass full fee to customer with RBI-mandated pre-payment disclosure

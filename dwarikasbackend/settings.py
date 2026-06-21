@@ -154,12 +154,22 @@ SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET')
 # ---------------------------------------------------------------------------
 # CORS framework boundaries
 #
-# CORS_ALLOW_ALL_ORIGINS is permissive during development. Tighten this in
-# production to an explicit allow-list of client origins (Next.js web portal,
-# mobile app host, Admin POS UI).
+# In production, CORS_ALLOWED_ORIGINS must be set as an environment variable
+# (via Secret Manager) containing a comma-separated list of allowed frontend
+# origins, e.g.:
+#   https://app.dwarikas.com,https://admin.dwarikas.com,https://www.dwarikas.com
+#
+# When CORS_ALLOWED_ORIGINS is not set (local development), all origins are
+# allowed as a convenience fallback — NEVER leave this unset in production.
 # ---------------------------------------------------------------------------
 
-CORS_ALLOW_ALL_ORIGINS = True  # TODO: restrict to explicit origins in production
+_cors_origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if _cors_origins_str:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_str.split(',') if o.strip()]
+    CORS_ALLOW_ALL_ORIGINS = False
+else:
+    # Local development fallback — tighten via CORS_ALLOWED_ORIGINS in production
+    CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -172,6 +182,20 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+
+# ---------------------------------------------------------------------------
+# Cloud Run service self-reference URL
+#
+# Cloud Tasks callbacks target the running Django service itself. In production
+# this must be set to the Cloud Run service URL via --set-env-vars in gcloud.
+# The localhost fallback is used only during local development.
+# ---------------------------------------------------------------------------
+
+CLOUD_RUN_SERVICE_URL = os.environ.get(
+    'CLOUD_RUN_SERVICE_URL',
+    'http://localhost:8080',  # local dev fallback — override in Cloud Run deployment
+)
 
 
 # ---------------------------------------------------------------------------
