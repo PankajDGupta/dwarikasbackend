@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libssl-dev \
     libffi-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -24,7 +24,8 @@ COPY pyproject.toml uv.lock ./
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel uv && \
-    uv pip install --system -r pyproject.toml && \
+    uv pip compile pyproject.toml -o requirements.txt && \
+    uv pip install -r requirements.txt && \
     pip install gunicorn>=21.0.0
 
 # Stage 2: Runtime - Lightweight production image
@@ -42,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     libssl3 \
     libffi8 \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

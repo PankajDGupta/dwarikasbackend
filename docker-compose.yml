@@ -1,0 +1,77 @@
+# =============================================================================
+# docker-compose.yml — Dwarikas Backend Local Development Stack
+#
+# Starts:
+#   - dwarikas-api  : Django/Gunicorn API on http://localhost:8080
+#   - dwarikas-redis: Redis for rate-limiting, JTI blocklist, token cache
+#
+# Prerequisites (run BEFORE docker compose up):
+#   1. supabase start          → starts Postgres on localhost:54322
+#   2. Copy .env.docker and fill in SUPABASE_JWT_SECRET
+#
+# Usage:
+#   docker compose --env-file .env.docker up --build
+#
+# Frontend dev base URL: http://localhost:8080/api/v1/
+# Health check:          http://localhost:8080/api/v1/health/
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache backend for DRF throttling (Spec #16), JTI blocklist,
+  # and Amazon SP-API token caching (Spec #23).
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: dwarikas-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no   # no persistence needed locally
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Django API — built from the production Dockerfile.
+  # Connects to:
+  #   - Redis container (above) for cache
+  #   - Supabase local CLI stack on host port 54322 for PostgreSQL
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dwarikas-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.docker
+    environment:
+      # Override DATABASE_URL to use host-gateway so the container can reach
+      # the Supabase local CLI Postgres (running on the host, port 54322).
+      # "host-gateway" is a Docker special DNS name resolving to the host machine.
+      DATABASE_URL: postgresql://postgres:postgres@host-gateway:54322/postgres
+      REDIS_URL: redis://redis:6379/0      # use the redis service name, not localhost
+      CLOUD_RUN_SERVICE_URL: http://localhost:8080
+    extra_hosts:
+      - "host-gateway:host-gateway"        # Docker >=20.10 magic hostname
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import http.client; conn = http.client.HTTPConnection('localhost:8080'); conn.request('GET', '/api/v1/health/'); r = conn.getresponse(); exit(0 if r.status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+# No named volumes needed — stateless API + external Supabase

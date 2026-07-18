@@ -4,11 +4,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
  
-- Spec #25: Cloud Run Deployment Readiness — **Code-level changes complete; infrastructure provisioning TBD (manual)**
+- Spec #25: Cloud Run Deployment Readiness — **Code-level changes complete; local Docker Compose dev stack ready**
+- **Frontend Development: Ready to start** — Django API runs locally via Docker Desktop
  
 ## Current Goal
  
-- Complete Spec #25 infrastructure prerequisites (GCP project, Secret Manager, Supabase prod, Redis)
+- **Immediate:** Start frontend development using `docker compose --env-file .env.docker up --build` (API on http://localhost:8080)
+- Complete Spec #25 infrastructure prerequisites (GCP project, Secret Manager, Supabase prod, Redis) — can run in parallel with frontend dev
 - Then execute Spec #26 — Production Deployment Runbook (CI/CD `cloudbuild.yaml`)
 
 
@@ -197,6 +199,8 @@ Update this file after every meaningful implementation change.
   - Implemented `UserAgentValidationMiddleware` to enforce device binding and prevent JWT replay attacks.
   - Added `GET /api/v1/health/` liveness check for database and cache connections.
   - Added `POST /api/v1/auth/logout/` token revocation endpoint.
+  - Added `TEMPLATES` configuration to `settings.py` to enable template resolution for Django REST Framework's Browsable API when accessed via browser.
+  - Explicitly configured `HealthCheckView` to only use `JSONRenderer` so health checks are lightweight, return pure JSON, and skip template lookup engines.
   - Written 9 comprehensive unit and integration tests verifying all security checks.
   - **Completed:** 2026-06-06T23:58:00+05:30
 
@@ -281,15 +285,14 @@ Update this file after every meaningful implementation change.
   - **Completed:** 2026-06-20T19:40:00+05:30
 
 - ✅ Spec #25 (Code-Level) — Cloud Run Deployment Readiness — Code Changes
-  - Fixed `Dockerfile`: switched to `uv pip install -r pyproject.toml` so all packages from `pyproject.toml` are installed (10 were previously missing: opencv, numpy, razorpay, django-axes, django-redis, redis, dj-database-url, django-filter, python-barcode, Pillow)
-  - Fixed `Dockerfile`: added `libgl1-mesa-glx` and `libglib2.0-0` runtime libs required by `opencv-python-headless`
-  - Fixed `Dockerfile`: corrected HEALTHCHECK path from `/` (404) to `/api/v1/health/`; bumped `start-period` to 60s
-  - Fixed `Dockerfile`: tuned Gunicorn to `--workers 5` (2 vCPU formula), `--threads 2`, `--max-requests 1000`, `--max-requests-jitter 50`, `--graceful-timeout 30`
+  - Fixed `Dockerfile`: switched to `uv pip compile pyproject.toml -o requirements.txt` and `uv pip install -r requirements.txt` to compile and install all dependencies correctly inside the virtual environment (`/opt/venv`) rather than installing them globally
+  - Fixed `Dockerfile`: replaced obsolete package `libgl1-mesa-glx` with `libgl1` in both builder and runtime stages to prevent installation failures on newer Debian Trixie base images
+  - Fixed `pyproject.toml`: corrected the package name typo `google-cloud-secretmanager` to `google-cloud-secret-manager`
   - Fixed `dwarikasbackend/settings.py`: replaced `CORS_ALLOW_ALL_ORIGINS = True` with env-var-controlled allowlist via `CORS_ALLOWED_ORIGINS`
   - Added `CLOUD_RUN_SERVICE_URL` setting to `settings.py` (Cloud Tasks self-invocation URL)
   - Created `supabase/snippets/001_initial_schema.sql` — base schema extracted from `system_design.md` (profiles, products, product_variants, promotions, reservations, orders + RLS + security definer helpers)
   - Created `.env.example` — complete local dev variable template with Secret Manager annotations for all 29 prod variables
-  - **Completed (code):** 2026-06-21T12:45:00+05:30
+  - **Completed (code & local stack):** 2026-07-17T22:50:00+05:30
   - **TBD (Manual — Operator):** GCP project + billing + APIs, IAM service accounts, Artifact Registry, Secret Manager (27 secrets), GCS bucket, Cloud Tasks queue, VPC connector, Redis Memorystore, Document AI processor, Supabase prod project + schema apply, manager role setup, external integration onboarding (Razorpay, WhatsApp, Amazon SP-API, ONDC, JioMart/Fynd, Blinkit), Cloud Run Job + Service first deploy
 
 
